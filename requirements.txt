@@ -1,0 +1,3 @@
+pyTelegrambotAPI
+requests
+transliterate
