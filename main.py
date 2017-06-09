@@ -2,11 +2,12 @@
 
 import http.client
 import json
+import os
 import time
 import urllib
+import datetime
 import urllib.request
 import re
-
 
 import telebot
 from telebot import types
@@ -27,6 +28,7 @@ usersDownloadCommand = {}
 lastChoosedFile = {}
 usersDownTitle = {}
 usersDownSize = {}
+usersDownExt = {}
 usersDownLink = {}
 
 bot = telebot.TeleBot(constants.token)
@@ -37,6 +39,9 @@ commands = {  # command description used in the "help" command
 
 hideBoard = types.ReplyKeyboardRemove()  # if sent as reply_markup, will hide the keyboard
 
+
+with open("log.txt", "a") as myfile:
+    myfile.write(str(datetime.datetime.now())+": "+"New session"+"\n")
 
 # Открытие соединения с VK.
 def getApiConnection():
@@ -113,10 +118,14 @@ def generateAnswer(message, offset, type):
                     if (offset * 5) - 5 <= iter < offset * 5:
                         genereted_answer += data.get(iter).get("title", 0) + "\n"
 
-                        usersDownloadCommand["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = "dow_" + str(cid) + str(data.get(iter).get("id", 0))
-                        usersDownTitle["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get("title", 0)
+                        usersDownloadCommand["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = "dow_" + str(
+                            cid) + str(data.get(iter).get("id", 0))
+                        usersDownTitle["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
+                            "title", 0)
 
                         genereted_answer += "Расширение фаила: " + data.get(iter).get("ext", 0) + "\n"
+                        usersDownExt["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
+                            "ext", 0)
                         unRedirectUrl = data.get(iter).get("url", 0)
                         size = data.get(iter).get("size", 0)
 
@@ -125,11 +134,11 @@ def generateAnswer(message, offset, type):
                         size = float(size)  # in bytes
                         size = size / 1024.0  # in KB (Kilo Bytes)
                         size = size / 1024.0  # size in MB (Mega Bytes)
-                        genereted_answer += "Размер фаила:" + " " "%.3f" % size + "MB"+"\n"
+                        genereted_answer += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
 
                         usersDownLink["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = unRedirectUrl
 
-                        genereted_answer += "/dow_"+str(cid)+str(data.get(iter).get("id", 0)) + "\n"
+                        genereted_answer += "/dow_" + str(cid) + str(data.get(iter).get("id", 0)) + "\n"
                         genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                             emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                             emoji.emojiCodeDict[":small_blue_diamond:"] + \
@@ -185,8 +194,10 @@ def listener(messages):
     """
     for m in messages:
         if m.content_type == 'text':
-            # print the sent message to the console
-            print(str(m.chat.first_name) + " [" + str(m.chat.id) + "]: " + m.text)
+            parsedText = urllib.parse.quote(m.text)
+            with open("log.txt", "a") as myfile:# print the sent message to the console
+                myfile.write(str(datetime.datetime.now())+": "+ str(m.chat.first_name)+" "+str(m.chat.last_name) + " [" + str(m.chat.id) + "]: " + parsedText+"\n")
+                print(str(str(datetime.datetime.now())+": "+m.chat.first_name) + " [" + str(m.chat.id) + "]: " + m.text)
 
 
 bot.set_update_listener(listener)  # register listener
@@ -205,7 +216,8 @@ def command_start(m):
         bot.send_message(cid, "I already know you, no need for me to scan you again!")
         command_help(m)  # show the new user the help page
 
-#func=lambda message: get_user_step(message.chat.id) == 1
+
+# func=lambda message: get_user_step(message.chat.id) == 1
 @bot.message_handler(commands=usersDownloadCommand.keys())
 def command_download(m):
     cid = m.chat.id
@@ -225,10 +237,15 @@ def command_download(m):
     size = float(size)  # in bytes
     size = size / 1024.0  # in KB (Kilo Bytes)
     size = size / 1024.0  # size in MB (Mega Bytes)
+
     dwTypeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-    dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"], "As File")
+    if size < 50:
+        dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"], "As File")
+    else:
+        dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"])
     lastChoosedFile[cid] = line
     bot.send_message(cid, size, reply_markup=dwTypeSelect)
+
 
 @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 2)
 def msg_step_two(message):
@@ -236,17 +253,49 @@ def msg_step_two(message):
     text = message.text
     bot.send_chat_action(cid, 'typing')
     if text == "Direct Link via VK" + emoji.emojiCodeDict[":link:"]:
-        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],reply_markup=hideBoard)
+
+        text = "Вы получили пряму ссылку на скачивание." + "\n"
+        size = usersDownSize[lastChoosedFile[cid]]
+        size = float(size)  # in bytes
+        size = size / 1024.0  # in KB (Kilo Bytes)
+        size = size / 1024.0  # size in MB (Mega Bytes)
+        text += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
+        text += "Имя фаила: " + usersDownTitle[lastChoosedFile[cid]] + "\n"
+
+        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]], reply_markup=hideBoard)
         userStep[cid] = 0
-    if text == "As File":
-        bot.send_message(cid, lastChoosedFile[cid])
-        file_name = slugify(usersDownTitle[cid])
-        # urllib.request.urlretrieve(url, file_name+"."+item.get("ext", 0))
-        # doc = open(file_name, 'rb')
-        # bot.send_document(message.from_user.id,doc)
-        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],
-                         reply_markup=hideBoard)
+    elif text == "As File":
+        text = "Фаил загружается и вскоре будет отправлен вам."+"\n"
+        size = usersDownSize[lastChoosedFile[cid]]
+        size = float(size)  # in bytes
+        size = size / 1024.0  # in KB (Kilo Bytes)
+        size = size / 1024.0  # size in MB (Mega Bytes)
+        text += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
+        text += "Имя фаила: " + usersDownTitle[lastChoosedFile[cid]] + "\n"
+        bot.send_message(cid, text)
+        title = str(usersDownTitle[lastChoosedFile[cid]])
+        line = title.split('.')
+        file_name = slugify(line[0])
+        if file_name is None:
+            file_name = line[0]
+        ext = usersDownExt[lastChoosedFile[cid]]
+        urllib.request.urlretrieve(usersDownLink[lastChoosedFile[cid]], file_name + "." + ext)
+        ###До сюда всё работает
+        doc = open(file_name + "." + ext, 'rb')
+        bot.send_document(message.from_user.id, doc, reply_markup=hideBoard)
+        doc.close()
+        os.remove(file_name + "." + ext)
+        #bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],reply_markup=hideBoard)
         userStep[cid] = 0
+    else:
+        bot.send_message(cid,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
+                         emoji.emojiCodeDict[":no_entry_sign:"])
+        bot.send_message(cid,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок." + emoji.emojiCodeDict[
+                             ":no_entry_sign:"])
+
+
 @bot.message_handler(commands=['help'])
 def command_help(m):
     help_text = "Доступные следующие команды: \n"
@@ -311,8 +360,8 @@ def msg_step_one(message):
     cid = message.chat.id
     text = message.text
     bot.send_chat_action(cid, 'typing')
-    #todo добавить while`ы везде ,чтобы избежать вылета полноценного
-    #todo утечка памяти при большом кол-ве пользователей,ибо надо хранить все ссылки на все фаилы
+    # todo добавить while`ы везде ,чтобы избежать вылета полноценного
+    # todo утечка памяти при большом кол-ве пользователей,ибо надо хранить все ссылки на все фаилы
 
     if text == "Docs" + emoji.emojiCodeDict[
         ":page_facing_up:"]:
@@ -413,7 +462,7 @@ def msg_step_one(message):
     #########################7777777777777777777777777
     elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
         try:
-            usersChoosedType[cid] = 7  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 8  # !!!!!!!!!!!!!!
             bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
                              reply_markup=hideBoard)
             cid = message.chat.id
@@ -429,7 +478,7 @@ def msg_step_one(message):
     ##########88888888888888888888
     elif text == "Other":
         try:
-            usersChoosedType[cid] = 8  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
             bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
                              reply_markup=hideBoard)
             cid = message.chat.id
@@ -452,7 +501,7 @@ def msg_step_one(message):
             generated_answer = generateAnswer(message, 1, int(9))
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
-            userStep[cid] = 0 # reset the users step back to 0
+            userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
@@ -473,7 +522,7 @@ def msg_step_one(message):
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     isGone = True
-    while(isGone):
+    while (isGone):
         try:
             cid = message.chat.id
             text = message.text
