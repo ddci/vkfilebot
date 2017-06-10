@@ -39,9 +39,9 @@ commands = {  # command description used in the "help" command
 
 hideBoard = types.ReplyKeyboardRemove()  # if sent as reply_markup, will hide the keyboard
 
-
 with open("log.txt", "a") as myfile:
-    myfile.write(str(datetime.datetime.now())+": "+"New session"+"\n")
+    myfile.write(str(datetime.datetime.now()) + ": " + "New session" + "\n")
+
 
 # Открытие соединения с VK.
 def getApiConnection():
@@ -51,7 +51,6 @@ def getApiConnection():
 def generateAnswer(message, offset, type):
     cid = message.chat.id
     text = message.text
-    # bot.send_chat_action(cid, 'typing')
     if offset == 10:
         usersIsAlreadySearched[cid] = False
     try:
@@ -79,7 +78,7 @@ def generateAnswer(message, offset, type):
                 bot.send_message(message.chat.id, "Прости,но я ничего не нашёл")
             else:
                 genereted_answer = emoji.emojiCodeDict[":white_check_mark:"] + "Найденные фаилы по запросу: " + \
-                                   usersMessageSearchRequest[cid] + "\n"
+                                   "'" + "<b>" + str(usersMessageSearchRequest[cid]) + "</b>" + "'" + "\n"
                 # Emoji here
                 data = {'count': 0}
 
@@ -112,18 +111,18 @@ def generateAnswer(message, offset, type):
                 if offset == 1:
                     if data.get("count") == 0:
                         genereted_answer += emoji.emojiCodeDict[":no_entry:"]
-                    genereted_answer += "Фаилов соотвутствующих критерию: " + str(data.get("count")) + "\n"
+                    genereted_answer += "Фаилов соотвутствующих критерию: " + str(data.get("count")) + "\n" + "\n"
                     usersCountFiles[cid] = int(data.get("count"))
                 for iter in range(0, int(data.get("count"))):
                     if (offset * 5) - 5 <= iter < offset * 5:
-                        genereted_answer += data.get(iter).get("title", 0) + "\n"
+                        genereted_answer += "<b>" + str(data.get(iter).get("title", 0) + "\n") + "</b>"
 
                         usersDownloadCommand["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = "dow_" + str(
                             cid) + str(data.get(iter).get("id", 0))
                         usersDownTitle["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
                             "title", 0)
 
-                        genereted_answer += "Расширение фаила: " + data.get(iter).get("ext", 0) + "\n"
+                        genereted_answer += "Расширение фаила: " + "<i>" + data.get(iter).get("ext", 0) + "</i>" + "\n"
                         usersDownExt["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
                             "ext", 0)
                         unRedirectUrl = data.get(iter).get("url", 0)
@@ -134,11 +133,13 @@ def generateAnswer(message, offset, type):
                         size = float(size)  # in bytes
                         size = size / 1024.0  # in KB (Kilo Bytes)
                         size = size / 1024.0  # size in MB (Mega Bytes)
-                        genereted_answer += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
+                        genereted_answer += "Размер фаила:" + "<i>" + " " "%.3f" % size + " MB" + "</i>" + "\n"
 
                         usersDownLink["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = unRedirectUrl
 
-                        genereted_answer += "/dow_" + str(cid) + str(data.get(iter).get("id", 0)) + "\n"
+                        genereted_answer += "<i>" + "Download: " + "</i>" + "/dow_" + str(cid) + str(
+                            data.get(iter).get("id", 0)) + "\n" + "\n"
+
                         genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                             emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                             emoji.emojiCodeDict[":small_blue_diamond:"] + \
@@ -195,9 +196,11 @@ def listener(messages):
     for m in messages:
         if m.content_type == 'text':
             parsedText = urllib.parse.quote(m.text)
-            with open("log.txt", "a") as myfile:# print the sent message to the console
-                myfile.write(str(datetime.datetime.now())+": "+ str(m.chat.first_name)+" "+str(m.chat.last_name) + " [" + str(m.chat.id) + "]: " + parsedText+"\n")
-                print(str(str(datetime.datetime.now())+": "+m.chat.first_name) + " [" + str(m.chat.id) + "]: " + m.text)
+            with open("log.txt", "a") as myfile:  # print the sent message to the console
+                myfile.write(str(datetime.datetime.now()) + ": " + str(m.chat.first_name) + " " + str(
+                    m.chat.last_name) + " [" + str(m.chat.id) + "]: " + parsedText + "\n")
+                print(str(str(datetime.datetime.now()) + ": " + m.chat.first_name) + " [" + str(
+                    m.chat.id) + "]: " + m.text)
 
 
 bot.set_update_listener(listener)  # register listener
@@ -209,11 +212,11 @@ def command_start(m):
     if cid not in knownUsers:  # if user hasn't used the "/start" command yet:
         knownUsers.append(cid)  # save user id, so you could brodcast messages to all users of this bot later
         userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
-        bot.send_message(cid, "Hello, stranger, let me scan you...")
-        bot.send_message(cid, "Scanning complete, I know you now")
+        # bot.send_message(cid, "Hello, stranger, let me scan you...")
+        # bot.send_message(cid, "Scanning complete, I know you now")
         command_help(m)  # show the new user the help page
     else:
-        bot.send_message(cid, "I already know you, no need for me to scan you again!")
+        # bot.send_message(cid, "I already know you, no need for me to scan you again!")
         command_help(m)  # show the new user the help page
 
 
@@ -244,7 +247,10 @@ def command_download(m):
     else:
         dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"])
     lastChoosedFile[cid] = line
-    bot.send_message(cid, size, reply_markup=dwTypeSelect)
+    bot.send_message(cid,
+                     "Выбери способ загрузки. " + '\n' + "Учти,если ВК заблокирован,то скачать по ссылке будет "
+                                                         "невозможно(кроме VPN).", parse_mode="HTML",
+                     reply_markup=dwTypeSelect)
 
 
 @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 2)
@@ -259,20 +265,19 @@ def msg_step_two(message):
         size = float(size)  # in bytes
         size = size / 1024.0  # in KB (Kilo Bytes)
         size = size / 1024.0  # size in MB (Mega Bytes)
-        text += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
-        text += "Имя фаила: " + usersDownTitle[lastChoosedFile[cid]] + "\n"
-
-        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]], reply_markup=hideBoard)
+        text += "Имя фаила: " + "<b>" + usersDownTitle[lastChoosedFile[cid]] + "</b>" + "\n"
+        text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
+        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]], parse_mode="HTML", reply_markup=hideBoard)
         userStep[cid] = 0
     elif text == "As File":
-        text = "Фаил загружается и вскоре будет отправлен вам."+"\n"
+        text = "Фаил загружается и вскоре будет отправлен вам." + "\n"
         size = usersDownSize[lastChoosedFile[cid]]
         size = float(size)  # in bytes
         size = size / 1024.0  # in KB (Kilo Bytes)
         size = size / 1024.0  # size in MB (Mega Bytes)
-        text += "Размер фаила:" + " " "%.3f" % size + "MB" + "\n"
-        text += "Имя фаила: " + usersDownTitle[lastChoosedFile[cid]] + "\n"
-        bot.send_message(cid, text)
+        text += "Имя фаила: " + "<b>" + usersDownTitle[lastChoosedFile[cid]] + "</b>" + "\n"
+        text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
+        bot.send_message(cid, text, parse_mode="HTML", reply_markup=hideBoard)
         title = str(usersDownTitle[lastChoosedFile[cid]])
         line = title.split('.')
         file_name = slugify(line[0])
@@ -285,7 +290,7 @@ def msg_step_two(message):
         bot.send_document(message.from_user.id, doc, reply_markup=hideBoard)
         doc.close()
         os.remove(file_name + "." + ext)
-        #bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],reply_markup=hideBoard)
+        # bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],reply_markup=hideBoard)
         userStep[cid] = 0
     else:
         bot.send_message(cid,
@@ -304,7 +309,7 @@ def command_help(m):
         help_text += commands[key] + "\n"
     pass
     help_text = help_text + "\n" + "Для взаимодействия с ботом,просто отправь мне свой поисковый запрос,дальше выбери тип фаила," \
-                                   "и способ загрузки. Не бойся мы дадим тебе клваиатуру,сильно напрягаться не придётся."
+                                   "и способ загрузки." + "\n" + "Бот позволяет загружать фаилы из Вконтакте объёмом до 50МБ,и получать ссылки на все фаилы вне зависимости от объёма."
     bot.send_message(m.chat.id, help_text)  # send the generated help page
 
 
@@ -328,6 +333,8 @@ def pages_keyboard(offset, cid):
     time.sleep(0.2)
     keyboard = types.InlineKeyboardMarkup()
     btns = []
+    if usersCountFiles[cid] == 0:
+        return hideBoard
     if offset > 1:
         btns.append(types.InlineKeyboardButton(
             text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
@@ -350,7 +357,8 @@ def pages(c):
             chat_id=c.message.chat.id,
             message_id=c.message.message_id,
             text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
-            reply_markup=pages_keyboard(int(c.data[3:]), cid))
+            parse_mode='HTML',
+            reply_markup=pages_keyboard(int(c.data[3:]), cid)),
     except:
         print("Error in inline method")
 
@@ -367,12 +375,12 @@ def msg_step_one(message):
         ":page_facing_up:"]:
         try:
             usersChoosedType[cid] = 1  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(1))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -383,12 +391,12 @@ def msg_step_one(message):
     elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
         try:
             usersChoosedType[cid] = 2  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(2))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -399,12 +407,12 @@ def msg_step_one(message):
     elif text == "Gif":
         try:
             usersChoosedType[cid] = 3  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(3))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -415,12 +423,12 @@ def msg_step_one(message):
     elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
         try:
             usersChoosedType[cid] = 4  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(4))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -431,12 +439,12 @@ def msg_step_one(message):
     elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
         try:
             usersChoosedType[cid] = 5  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(5))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -447,12 +455,12 @@ def msg_step_one(message):
     elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
         try:
             usersChoosedType[cid] = 6  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(6))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -463,12 +471,12 @@ def msg_step_one(message):
     elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
         try:
             usersChoosedType[cid] = 8  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(8))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -479,12 +487,12 @@ def msg_step_one(message):
     elif text == "Other":
         try:
             usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(9))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -495,12 +503,12 @@ def msg_step_one(message):
     elif text == "All":
         try:
             usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
-            bot.send_message(message.from_user.id, "Привет вот я надеюсь тут есть то что ты ищешь!",
-                             reply_markup=hideBoard)
+
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(9))
             bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, reply_markup=pages_keyboard(1, cid))
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
@@ -524,6 +532,7 @@ def handle_text(message):
     isGone = True
     while (isGone):
         try:
+            bot.send_chat_action(message.from_user.id, 'typing')
             cid = message.chat.id
             text = message.text
             apiConnection = getApiConnection()
@@ -545,7 +554,8 @@ def handle_text(message):
                     isGone = False
                 else:
                     bot.send_message(message.from_user.id,
-                                     "Я нашёл " + str(count) + " фаилов. " + "\n" + "Ну что,давай отсортируем их?")
+                                     "Я нашёл " + str(
+                                         count) + " фаилов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
                     show_keybord(message)
                     isGone = False
                 pass
