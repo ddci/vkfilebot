@@ -317,11 +317,11 @@ def command_help(m):
 def show_keybord(message):
     cid = message.chat.id
     typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-    typeSelect.row("Docs" + emoji.emojiCodeDict[":page_facing_up:"], "Archives" + emoji.emojiCodeDict[":compression :"])
+
+    typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
+    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
     typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
     typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
-    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"])
-    typeSelect.row("Other")
     bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)  # show the keyboard
     userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
     usersMessageSearchRequest[cid] = message.text
@@ -375,7 +375,7 @@ def msg_step_one(message):
         ":page_facing_up:"]:
         try:
             usersChoosedType[cid] = 1  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(1))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -391,7 +391,7 @@ def msg_step_one(message):
     elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
         try:
             usersChoosedType[cid] = 2  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(2))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -407,7 +407,7 @@ def msg_step_one(message):
     elif text == "Gif":
         try:
             usersChoosedType[cid] = 3  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(3))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -423,7 +423,7 @@ def msg_step_one(message):
     elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
         try:
             usersChoosedType[cid] = 4  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(4))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -439,7 +439,7 @@ def msg_step_one(message):
     elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
         try:
             usersChoosedType[cid] = 5  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(5))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -455,7 +455,7 @@ def msg_step_one(message):
     elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
         try:
             usersChoosedType[cid] = 6  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(6))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -471,7 +471,7 @@ def msg_step_one(message):
     elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
         try:
             usersChoosedType[cid] = 8  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(8))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -484,10 +484,10 @@ def msg_step_one(message):
             userStep[cid] = 0
         pass
     ##########88888888888888888888
-    elif text == "Other":
+    elif text == "Show All":
         try:
             usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
-
+            bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(9))
             bot.send_chat_action(message.from_user.id, 'typing')
@@ -500,21 +500,6 @@ def msg_step_one(message):
             userStep[cid] = 0
         pass
     #############AAAAAAAAAAAAAAAAALLLLLLLLLLLLLLLLLLLLL
-    elif text == "All":
-        try:
-            usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
-
-            cid = message.chat.id
-            generated_answer = generateAnswer(message, 1, int(9))
-            bot.send_chat_action(message.from_user.id, 'typing')
-            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                             reply_markup=pages_keyboard(1, cid))
-            userStep[cid] = 0  # reset the users step back to 0
-        except:
-            bot.send_message(message.from_user.id,
-                             "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
-            userStep[cid] = 0
-        pass
     elif text == "pussy":
         bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
         userStep[cid] = 1
