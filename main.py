@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*
-
+"""
+    File name: main.py
+    Author: Daniil Nikulin
+    Date created: 10.05.2017
+    Date last modified: 11.06.2017
+    Python Version: 3.6.1
+"""
 import http.client
 import json
 import os
@@ -20,16 +26,16 @@ knownUsers = []  # todo: save these in a file,
 userStep = {}  # so they won't reset every time the bot restarts
 usersMessageSearchRequest = {}
 usersChoosedType = {}
-usersVKresponse = {}
+usersVKResponse = {}
 usersIsAlreadySearched = {}
 usersCountFiles = {}
-
 usersDownloadCommand = {}
-lastChoosedFile = {}
+usersLastChoosedFile = {}
 usersDownTitle = {}
 usersDownSize = {}
 usersDownExt = {}
 usersDownLink = {}
+usersInlineKeyboardIsPressed = {}
 
 bot = telebot.TeleBot(constants.token)
 commands = {  # command description used in the "help" command
@@ -45,31 +51,29 @@ with open("log.txt", "a") as myfile:
 
 # Открытие соединения с VK.
 def getApiConnection():
-    return (http.client.HTTPSConnection("api.vk.com"))
+    return http.client.HTTPSConnection("api.vk.com")
 
 
-def generateAnswer(message, offset, type):
+# noinspection PyTypeChecker
+def generateAnswer(message, offset, file_category):
     cid = message.chat.id
-    text = message.text
     if offset == 10:
         usersIsAlreadySearched[cid] = False
     try:
         if not usersIsAlreadySearched[cid]:
             apiConnection = getApiConnection()
             cid = message.chat.id
-            seachq = urllib.parse.quote(usersMessageSearchRequest[cid])
-            url = '/method/docs.search?q=' + seachq + '&count=' + '500' \
+            searchText = urllib.parse.quote(usersMessageSearchRequest[cid])
+            url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
                   + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
         pass
-
         try:
-
             if usersIsAlreadySearched[cid]:
-                vkResponse = usersVKresponse[cid]
+                vkResponse = usersVKResponse[cid]
             else:
-                usersVKresponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
+                usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
                 usersIsAlreadySearched[cid] = True
-        except (ConnectionError, http.client.BadStatusLine) as e:
+        except (ConnectionError, http.client.BadStatusLine):
             apiConnection.close()
         try:
             items = vkResponse.get("items")
@@ -78,78 +82,70 @@ def generateAnswer(message, offset, type):
                 bot.send_message(message.chat.id, "Прости,но я ничего не нашёл")
             else:
                 genereted_answer = emoji.emojiCodeDict[":white_check_mark:"] + "Найденные фаилы по запросу: " + \
-                                   "'" + "<b>" + str(usersMessageSearchRequest[cid]) + "</b>" + "'" + "\n"
-                # Emoji here
+                                   "'" + "<b>" + str(usersMessageSearchRequest[cid]) + "</b>" + "'" + "\n" + "\n"
                 data = {'count': 0}
-
-                if type >= 1 and type <= 8:
+                if 1 <= file_category <= 8:
                     for item in items:
-                        if item.get("type", 0) == type:
-                            item_new = {};
-                            item_new['id'] = item.get("id", 0)
-                            item_new['size'] = item.get("size", 0)
-                            item_new['title'] = item.get("title", 0)
-                            item_new['url'] = item.get("url", 0)
-                            item_new['type'] = item.get("type", 0)
-                            item_new['ext'] = item.get("ext", 0)
+                        if item.get("type", 0) == file_category:
+                            item_new = {'id': item.get("id", 0), 'size': item.get("size", 0),
+                                        'title': item.get("title", 0), 'url': item.get("url", 0),
+                                        'type': item.get("type", 0), 'ext': item.get("ext", 0)};
                             data[data.get('count')] = item_new
                             data['count'] = data.get('count') + 1
                         pass
                 else:
                     for item in items:
-                        item_new = {};
-                        item_new['id'] = item.get("id", 0)
-                        item_new['size'] = item.get("size", 0)
-                        item_new['title'] = item.get("title", 0)
-                        item_new['url'] = item.get("url", 0)
-                        item_new['type'] = item.get("type", 0)
-                        item_new['ext'] = item.get("ext", 0)
+                        item_new = {'id': item.get("id", 0), 'size': item.get("size", 0), 'title': item.get("title", 0),
+                                    'url': item.get("url", 0), 'type': item.get("type", 0), 'ext': item.get("ext", 0)}
                         data[data.get('count')] = item_new
                         data['count'] = data.get('count') + 1
                     pass
-                # jsonData = json.dumps(data)
                 if offset == 1:
                     if data.get("count") == 0:
                         genereted_answer += emoji.emojiCodeDict[":no_entry:"]
                     genereted_answer += "Фаилов соотвутствующих критерию: " + str(data.get("count")) + "\n" + "\n"
                     usersCountFiles[cid] = int(data.get("count"))
-                for iter in range(0, int(data.get("count"))):
-                    if (offset * 5) - 5 <= iter < offset * 5:
-                        genereted_answer += "<b>" + str(data.get(iter).get("title", 0) + "\n") + "</b>"
+                for iterPosition in range(0, int(data.get("count"))):
+                    if (offset * 5) - 5 <= iterPosition < offset * 5:
+                        genereted_answer += "<b>" + str(data.get(iterPosition).get("title", 0) + "\n") + "</b>"
 
-                        usersDownloadCommand["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = "dow_" + str(
-                            cid) + str(data.get(iter).get("id", 0))
-                        usersDownTitle["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
+                        usersDownloadCommand["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = "dw_" + str(
+                            cid) + str(data.get(iterPosition).get("id", 0))
+                        usersDownTitle["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = data.get(
+                            iterPosition).get(
                             "title", 0)
 
-                        genereted_answer += "Расширение фаила: " + "<i>" + data.get(iter).get("ext", 0) + "</i>" + "\n"
-                        usersDownExt["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = data.get(iter).get(
+                        genereted_answer += "Расширение фаила: " + "<i>" + data.get(iterPosition).get("ext",
+                                                                                                      0) + "</i>" + "\n"
+                        usersDownExt["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = data.get(
+                            iterPosition).get(
                             "ext", 0)
-                        unRedirectUrl = data.get(iter).get("url", 0)
-                        size = data.get(iter).get("size", 0)
+                        unRedirectUrl = data.get(iterPosition).get("url", 0)
+                        size = data.get(iterPosition).get("size", 0)
 
-                        usersDownSize["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = size
+                        usersDownSize["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = size
 
                         size = float(size)  # in bytes
                         size = size / 1024.0  # in KB (Kilo Bytes)
                         size = size / 1024.0  # size in MB (Mega Bytes)
                         genereted_answer += "Размер фаила:" + "<i>" + " " "%.3f" % size + " MB" + "</i>" + "\n"
 
-                        usersDownLink["dow_" + str(cid) + str(data.get(iter).get("id", 0))] = unRedirectUrl
+                        usersDownLink["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = unRedirectUrl
 
-                        genereted_answer += "<i>" + "Download: " + "</i>" + "/dow_" + str(cid) + str(
-                            data.get(iter).get("id", 0)) + "\n" + "\n"
+                        genereted_answer += "<i>" + "Download: " + "</i>" + "/dw_" + str(cid) + str(
+                            data.get(iterPosition).get("id", 0)) + "\n"
 
-                        genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                            emoji.emojiCodeDict[":small_red_triangle_down:"] + \
-                                            "\n"
+                        if (offset * 5) - 5 <= iterPosition < offset * 4:
+                            genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                                emoji.emojiCodeDict[":small_red_triangle_down:"] + "\n" + "\n"
+                        pass
                 pass
                 return genereted_answer
             pass
@@ -188,6 +184,43 @@ def get_user_step(uid):
         return 0
 
 
+pass
+
+
+def show_keybord(message):
+    cid = message.chat.id
+    typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
+    typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
+    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
+    typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
+    typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
+    bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)  # show the keyboard
+    userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
+    usersMessageSearchRequest[cid] = message.text
+
+
+pass
+
+
+def pages_keyboard(offset, cid):
+        time.sleep(0.2)
+        keyboard = types.InlineKeyboardMarkup()
+        btns = []
+        if usersCountFiles[cid] == 0:
+            return hideBoard
+        if offset > 1:
+            btns.append(types.InlineKeyboardButton(
+                text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
+        if offset < (usersCountFiles[cid] / 5):
+            btns.append(types.InlineKeyboardButton(
+                text=emoji.emojiCodeDict[":arrow_right:"], callback_data='to_{}'.format(offset + 1)))
+        keyboard.add(*btns)
+        return keyboard  # возвращаем объект клавиатуры
+
+
+pass
+
+
 # only used for console output now
 def listener(messages):
     """
@@ -199,8 +232,8 @@ def listener(messages):
             with open("log.txt", "a") as myfile:  # print the sent message to the console
                 myfile.write(str(datetime.datetime.now()) + ": " + str(m.chat.first_name) + " " + str(
                     m.chat.last_name) + " [" + str(m.chat.id) + "]: " + parsedText + "\n")
-                print(str(str(datetime.datetime.now()) + ": " + m.chat.first_name) + " [" + str(
-                    m.chat.id) + "]: " + m.text)
+                print(str(str(datetime.datetime.now()) + ": " + m.chat.first_name) + " " + str(
+                    m.chat.last_name) + " [" + str(m.chat.id) + "]: " + m.text)
 
 
 bot.set_update_listener(listener)  # register listener
@@ -220,20 +253,11 @@ def command_start(m):
         command_help(m)  # show the new user the help page
 
 
-# func=lambda message: get_user_step(message.chat.id) == 1
 @bot.message_handler(commands=usersDownloadCommand.keys())
 def command_download(m):
     cid = m.chat.id
     line = re.sub('[/]', '', m.text)
-
     userStep[cid] = 2
-
-    # opener = urllib.request.build_opener()
-    # request = urllib.request.Request(usersDownloadCommand[line])
-    # u = opener.open(request)
-    # link = u.geturl()
-    # site = urllib.request.urlopen(link)
-    # size = site.info().get('Content-Length')
     size = usersDownSize[line]
     if size is None:
         size = 0
@@ -246,10 +270,10 @@ def command_download(m):
         dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"], "As File")
     else:
         dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"])
-    lastChoosedFile[cid] = line
+    usersLastChoosedFile[cid] = line
     bot.send_message(cid,
                      "Выбери способ загрузки. " + '\n' + "Учти,если ВК заблокирован,то скачать по ссылке будет "
-                                                         "невозможно(кроме VPN).", parse_mode="HTML",
+                                                         "невозможно.", parse_mode="HTML",
                      reply_markup=dwTypeSelect)
 
 
@@ -259,38 +283,35 @@ def msg_step_two(message):
     text = message.text
     bot.send_chat_action(cid, 'typing')
     if text == "Direct Link via VK" + emoji.emojiCodeDict[":link:"]:
-
         text = "Вы получили пряму ссылку на скачивание." + "\n"
-        size = usersDownSize[lastChoosedFile[cid]]
+        size = usersDownSize[usersLastChoosedFile[cid]]
         size = float(size)  # in bytes
         size = size / 1024.0  # in KB (Kilo Bytes)
         size = size / 1024.0  # size in MB (Mega Bytes)
-        text += "Имя фаила: " + "<b>" + usersDownTitle[lastChoosedFile[cid]] + "</b>" + "\n"
+        text += "Имя фаила: " + "<b>" + usersDownTitle[usersLastChoosedFile[cid]] + "</b>" + "\n"
         text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
-        bot.send_message(cid, usersDownLink[lastChoosedFile[cid]], parse_mode="HTML", reply_markup=hideBoard)
+        bot.send_message(cid, usersDownLink[usersLastChoosedFile[cid]], parse_mode="HTML", reply_markup=hideBoard)
         userStep[cid] = 0
     elif text == "As File":
-        text = "Фаил загружается и вскоре будет отправлен вам." + "\n"
-        size = usersDownSize[lastChoosedFile[cid]]
+        text = emoji.emojiCodeDict[":hourglass_flowing_sand:"] + "Фаил загружается и вскоре будет отправлен вам." + "\n"
+        size = usersDownSize[usersLastChoosedFile[cid]]
         size = float(size)  # in bytes
         size = size / 1024.0  # in KB (Kilo Bytes)
         size = size / 1024.0  # size in MB (Mega Bytes)
-        text += "Имя фаила: " + "<b>" + usersDownTitle[lastChoosedFile[cid]] + "</b>" + "\n"
+        text += "Имя фаила: " + "<b>" + usersDownTitle[usersLastChoosedFile[cid]] + "</b>" + "\n"
         text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
         bot.send_message(cid, text, parse_mode="HTML", reply_markup=hideBoard)
-        title = str(usersDownTitle[lastChoosedFile[cid]])
+        title = str(usersDownTitle[usersLastChoosedFile[cid]])
         line = title.split('.')
         file_name = slugify(line[0])
         if file_name is None:
             file_name = line[0]
-        ext = usersDownExt[lastChoosedFile[cid]]
-        urllib.request.urlretrieve(usersDownLink[lastChoosedFile[cid]], file_name + "." + ext)
-        ###До сюда всё работает
+        ext = usersDownExt[usersLastChoosedFile[cid]]
+        urllib.request.urlretrieve(usersDownLink[usersLastChoosedFile[cid]], file_name + "." + ext)
         doc = open(file_name + "." + ext, 'rb')
         bot.send_document(message.from_user.id, doc, reply_markup=hideBoard)
         doc.close()
         os.remove(file_name + "." + ext)
-        # bot.send_message(cid, usersDownLink[lastChoosedFile[cid]],reply_markup=hideBoard)
         userStep[cid] = 0
     else:
         bot.send_message(cid,
@@ -313,52 +334,17 @@ def command_help(m):
     bot.send_message(m.chat.id, help_text)  # send the generated help page
 
 
-# @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 1)
-def show_keybord(message):
-    cid = message.chat.id
-    typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-
-    typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
-    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
-    typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
-    typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
-    bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)  # show the keyboard
-    userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
-    usersMessageSearchRequest[cid] = message.text
-
-
-def pages_keyboard(offset, cid):
-    """Формируем Inline-кнопки для перехода по страницам.
-    """
-    time.sleep(0.2)
-    keyboard = types.InlineKeyboardMarkup()
-    btns = []
-    if usersCountFiles[cid] == 0:
-        return hideBoard
-    if offset > 1:
-        btns.append(types.InlineKeyboardButton(
-            text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
-    if offset < (usersCountFiles[cid] / 5):
-        btns.append(types.InlineKeyboardButton(
-            text=emoji.emojiCodeDict[":arrow_right:"], callback_data='to_{}'.format(offset + 1)))
-    keyboard.add(*btns)
-    return keyboard  # возвращаем объект клавиатуры
-
-
 @bot.callback_query_handler(func=lambda c: c.data)
 def pages(c):
-    """Редактируем сообщение каждый раз, когда пользователь переходит по
-    страницам.
-    """
     time.sleep(0.5)
     cid = c.message.chat.id
     try:
-        bot.edit_message_text(
-            chat_id=c.message.chat.id,
-            message_id=c.message.message_id,
-            text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
-            parse_mode='HTML',
-            reply_markup=pages_keyboard(int(c.data[3:]), cid)),
+            bot.edit_message_text(
+                chat_id=c.message.chat.id,
+                message_id=c.message.message_id,
+                text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
+                parse_mode='HTML',
+                reply_markup=pages_keyboard(int(c.data[3:]), cid))
     except:
         print("Error in inline method")
 
@@ -370,11 +356,9 @@ def msg_step_one(message):
     bot.send_chat_action(cid, 'typing')
     # todo добавить while`ы везде ,чтобы избежать вылета полноценного
     # todo утечка памяти при большом кол-ве пользователей,ибо надо хранить все ссылки на все фаилы
-
-    if text == "Docs" + emoji.emojiCodeDict[
-        ":page_facing_up:"]:
+    if text == "Docs" + emoji.emojiCodeDict[":page_facing_up:"]:
         try:
-            usersChoosedType[cid] = 1  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 1
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(1))
@@ -387,10 +371,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    #####################2222222222222222222
     elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
         try:
-            usersChoosedType[cid] = 2  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 2
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(2))
@@ -403,10 +386,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    ###########################3333333333333333333
     elif text == "Gif":
         try:
-            usersChoosedType[cid] = 3  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 3
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(3))
@@ -419,10 +401,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    #########44444444444444444444
     elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
         try:
-            usersChoosedType[cid] = 4  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 4
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(4))
@@ -435,10 +416,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    ###########555555555555555555555555555555555555555555
     elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
         try:
-            usersChoosedType[cid] = 5  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 5
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(5))
@@ -451,10 +431,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    ###########666666666666666666666666666
     elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
         try:
-            usersChoosedType[cid] = 6  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 6
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(6))
@@ -467,10 +446,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    #########################7777777777777777777777777
     elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
         try:
-            usersChoosedType[cid] = 8  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 8
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(8))
@@ -483,10 +461,9 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    ##########88888888888888888888
     elif text == "Show All":
         try:
-            usersChoosedType[cid] = 9  # !!!!!!!!!!!!!!
+            usersChoosedType[cid] = 9
             bot.send_message(message.from_user.id, "Надеюсь,тут есть,то что тебе нужно.", reply_markup=hideBoard)
             cid = message.chat.id
             generated_answer = generateAnswer(message, 1, int(9))
@@ -499,7 +476,6 @@ def msg_step_one(message):
                              "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
             userStep[cid] = 0
         pass
-    #############AAAAAAAAAAAAAAAAALLLLLLLLLLLLLLLLLLLLL
     elif text == "pussy":
         bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
         userStep[cid] = 1
@@ -515,17 +491,16 @@ def msg_step_one(message):
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     isGone = True
-    while (isGone):
+    while isGone:
         try:
             bot.send_chat_action(message.from_user.id, 'typing')
             cid = message.chat.id
-            text = message.text
             apiConnection = getApiConnection()
-            seachq = urllib.parse.quote(message.text)
-            url = '/method/docs.search?q=' + seachq + '&count=' + '1000' \
+            searchText = urllib.parse.quote(message.text)
+            url = '/method/docs.search?q=' + searchText + '&count=' + '1000' \
                   + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
             try:
-                usersVKresponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
+                usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
                 usersIsAlreadySearched[cid] = True
             except (ConnectionError, http.client.BadStatusLine) as e:
                 apiConnection.close()
