@@ -7,3 +7,6 @@ $ pip install pyTelegramBotAPI
 $ pip install requests
 $ pip install transliterate
 ```
+
+
+![simple reuest](https://raw.github.com/ddci/vkfilebot/blob/master/img/overview.jpg)
