@@ -391,7 +391,7 @@ def pages(c):
                     message_id=c.message.message_id,
                     text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
                     parse_mode='HTML',
-                    reply_markup=pages_keyboard(int(c.daSta[3:]), cid))
+                    reply_markup=pages_keyboard(int(c.data[3:]), cid))
                 usersLastCData[cid] = int(c.data[3:])
                 usersLastKeyboard[cid] = pages_keyboard(int(c.data[3:]), cid)
             except:

@@ -1,6 +1,6 @@
 # vkfilebot
 Telegram Bot for serching and donloading files from VK<br>
-Available on Telegram [t.me/VKFiles_Bot](https://t.me/VKFiles_Bot)
+Available on Telegram [t.me/VKFiles_Bot](https://t.me/VKFiles_Bot)<br>
 Installation using pip (a Python package manager):<br>
 
 ```bash
