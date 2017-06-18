@@ -41,7 +41,7 @@ usersLastCData = {}
 
 # Read forbidden words from file
 def read_words(words_file):
-    return [word for line in open(words_file, 'r') for word in line.split()]
+    return [word for line in open(words_file, 'r', encoding='utf-8') for word in line.split()]
 
 
 forbiddenWords = read_words("swearWords.txt")
@@ -522,11 +522,14 @@ def handle_text(message):
                          emoji.emojiCodeDict[":no_entry_sign:"])
     else:
         for fullBadWord in forbiddenWordsFull:
-            if message.text.lower() == fullBadWord.lower():
+            text = str(message.text.lower()).encode("utf-8")
+            text2 = str(fullBadWord.lower()).encode("utf-8")
+            if text2 == text:
                 bot.send_message(message.from_user.id,
                                  emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут2" +
                                  emoji.emojiCodeDict[":no_entry_sign:"])
                 return
+            pass
         pass
         isGone = True
         usersInlineKeyboardIsPressed[cid] = False
@@ -537,33 +540,33 @@ def handle_text(message):
                 apiConnection = getApiConnection()
                 searchText = urllib.parse.quote(message.text)
                 url = '/method/docs.search?q=' + searchText + '&count=' + '1000' \
-                          + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
                 try:
                     usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
                     usersIsAlreadySearched[cid] = True
                 except (ConnectionError, http.client.BadStatusLine) as e:
                     apiConnection.close()
                 try:
-                        bot.send_chat_action(message.from_user.id, 'typing')  # show the bot "typing" (max. 5 secs)
-                        time.sleep(0.2)
-                        count = vkResponse.get("count")
-                        if count == 0:
-                            bot.send_message(message.from_user.id,
-                                             emoji.emojiCodeDict[":no_entry_sign:"] + "Прости,но я ничего не нашёл")
-                            isGone = False
-                        else:
-                            bot.send_message(message.from_user.id,
-                                             "Я нашёл " + str(
-                                                 count) + " фаилов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
-                            show_keybord(message)
-                            isGone = False
-                        pass
-                except:
-                        print("\n" + url)
-                        print("\n" + vkResponse)
-            except:
-                    bot.send_message(message.from_user.id, "Что-то сломалось,скоро починю.")
+                    bot.send_chat_action(message.from_user.id, 'typing')  # show the bot "typing" (max. 5 secs)
+                    time.sleep(0.2)
+                    count = vkResponse.get("count")
+                    if count == 0:
+                        bot.send_message(message.from_user.id,
+                                         emoji.emojiCodeDict[":no_entry_sign:"] + "Прости,но я ничего не нашёл")
+                        isGone = False
+                    else:
+                        bot.send_message(message.from_user.id,
+                                         "Я нашёл " + str(
+                                             count) + " фаилов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
+                        show_keybord(message)
+                        isGone = False
                     pass
+                except:
+                    print("\n" + url)
+                    print("\n" + vkResponse)
+            except:
+                bot.send_message(message.from_user.id, "Что-то сломалось,скоро починю.")
+                pass
             pass
         pass
     pass
