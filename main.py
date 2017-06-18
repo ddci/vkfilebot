@@ -36,6 +36,16 @@ usersDownSize = {}
 usersDownExt = {}
 usersDownLink = {}
 usersInlineKeyboardIsPressed = {}
+usersLastCData = {}
+
+
+# Read forbidden words from file
+def read_words(words_file):
+    return [word for line in open(words_file, 'r') for word in line.split()]
+
+
+forbiddenWords = read_words("swearWords.txt")
+forbiddenWordsFull = read_words("fullSwearWords.txt")
 
 bot = telebot.TeleBot(constants.token)
 commands = {  # command description used in the "help" command
@@ -57,6 +67,8 @@ def getApiConnection():
 # noinspection PyTypeChecker
 def generateAnswer(message, offset, file_category):
     cid = message.chat.id
+    if offset > 1:
+        usersInlineKeyboardIsPressed[cid] = True
     if offset == 10:
         usersIsAlreadySearched[cid] = False
     try:
@@ -135,7 +147,7 @@ def generateAnswer(message, offset, file_category):
                         genereted_answer += "<i>" + "Download: " + "</i>" + "/dw_" + str(cid) + str(
                             data.get(iterPosition).get("id", 0)) + "\n"
 
-                        if (offset * 5) - 5 <= iterPosition < offset * 4:
+                        if iterPosition - ((offset * 5) - 1):
                             genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                                 emoji.emojiCodeDict[":small_blue_diamond:"] + \
                                                 emoji.emojiCodeDict[":small_blue_diamond:"] + \
@@ -171,7 +183,7 @@ def vkRequest(api_connection, url):
             time.sleep(0.35)
             return vkRequest(api_connection, url)
 
-    return (vkJson)
+    return vkJson
 
 
 def get_user_step(uid):
@@ -203,19 +215,21 @@ pass
 
 
 def pages_keyboard(offset, cid):
-        time.sleep(0.2)
-        keyboard = types.InlineKeyboardMarkup()
-        btns = []
-        if usersCountFiles[cid] == 0:
-            return hideBoard
-        if offset > 1:
-            btns.append(types.InlineKeyboardButton(
-                text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
-        if offset < (usersCountFiles[cid] / 5):
-            btns.append(types.InlineKeyboardButton(
-                text=emoji.emojiCodeDict[":arrow_right:"], callback_data='to_{}'.format(offset + 1)))
-        keyboard.add(*btns)
-        return keyboard  # возвращаем объект клавиатуры
+    time.sleep(0.2)
+    keyboard = types.InlineKeyboardMarkup()
+    btns = []
+    if usersCountFiles[cid] == 0:
+        return hideBoard
+    if offset > 1:
+        btns.append(types.InlineKeyboardButton(
+            text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
+    if offset < (usersCountFiles[cid] / 5):
+        btns.append(types.InlineKeyboardButton(
+            text=str(offset), callback_data='to_{}'.format(offset)))
+        btns.append(types.InlineKeyboardButton(
+            text=emoji.emojiCodeDict[":arrow_right:"], callback_data='to_{}'.format(offset + 1)))
+    keyboard.add(*btns)
+    return keyboard  # возвращаем объект клавиатуры
 
 
 pass
@@ -336,17 +350,28 @@ def command_help(m):
 
 @bot.callback_query_handler(func=lambda c: c.data)
 def pages(c):
-    time.sleep(0.5)
+    # time.sleep(0.5)
     cid = c.message.chat.id
     try:
-            bot.edit_message_text(
-                chat_id=c.message.chat.id,
-                message_id=c.message.message_id,
-                text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
-                parse_mode='HTML',
-                reply_markup=pages_keyboard(int(c.data[3:]), cid))
+        if usersInlineKeyboardIsPressed[cid] is False:
+            try:
+                bot.edit_message_text(
+                    chat_id=c.message.chat.id,
+                    message_id=c.message.message_id,
+                    text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
+                    parse_mode='HTML',
+                    reply_markup=pages_keyboard(int(c.data[3:]), cid))
+                usersInlineKeyboardIsPressed[cid] = False
+                usersLastCData[cid] = int(c.data[3:])
+            except:
+                print("Error in inline method inside")
+        pass
     except:
-        print("Error in inline method")
+        print("Error in inline method outside")
+        pass
+
+
+pass
 
 
 @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 1)
@@ -490,41 +515,57 @@ def msg_step_one(message):
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
-    isGone = True
-    while isGone:
-        try:
-            bot.send_chat_action(message.from_user.id, 'typing')
-            cid = message.chat.id
-            apiConnection = getApiConnection()
-            searchText = urllib.parse.quote(message.text)
-            url = '/method/docs.search?q=' + searchText + '&count=' + '1000' \
-                  + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+    cid = message.chat.id
+    if any(word in message.text.lower() for word in forbiddenWords):
+        bot.send_message(message.from_user.id,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут." +
+                         emoji.emojiCodeDict[":no_entry_sign:"])
+    else:
+        for fullBadWord in forbiddenWordsFull:
+            if message.text.lower() == fullBadWord.lower():
+                bot.send_message(message.from_user.id,
+                                 emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут2" +
+                                 emoji.emojiCodeDict[":no_entry_sign:"])
+                return
+        pass
+        isGone = True
+        usersInlineKeyboardIsPressed[cid] = False
+        while isGone:
             try:
-                usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
-                usersIsAlreadySearched[cid] = True
-            except (ConnectionError, http.client.BadStatusLine) as e:
-                apiConnection.close()
-            try:
-                bot.send_chat_action(message.from_user.id, 'typing')  # show the bot "typing" (max. 5 secs)
-                time.sleep(0.2)
-                count = vkResponse.get("count")
-                if count == 0:
-                    bot.send_message(message.from_user.id,
-                                     emoji.emojiCodeDict[":no_entry_sign:"] + "Прости,но я ничего не нашёл")
-                    isGone = False
-                else:
-                    bot.send_message(message.from_user.id,
-                                     "Я нашёл " + str(
-                                         count) + " фаилов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
-                    show_keybord(message)
-                    isGone = False
-                pass
+                bot.send_chat_action(message.from_user.id, 'typing')
+                cid = message.chat.id
+                apiConnection = getApiConnection()
+                searchText = urllib.parse.quote(message.text)
+                url = '/method/docs.search?q=' + searchText + '&count=' + '1000' \
+                          + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+                try:
+                    usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
+                    usersIsAlreadySearched[cid] = True
+                except (ConnectionError, http.client.BadStatusLine) as e:
+                    apiConnection.close()
+                try:
+                        bot.send_chat_action(message.from_user.id, 'typing')  # show the bot "typing" (max. 5 secs)
+                        time.sleep(0.2)
+                        count = vkResponse.get("count")
+                        if count == 0:
+                            bot.send_message(message.from_user.id,
+                                             emoji.emojiCodeDict[":no_entry_sign:"] + "Прости,но я ничего не нашёл")
+                            isGone = False
+                        else:
+                            bot.send_message(message.from_user.id,
+                                             "Я нашёл " + str(
+                                                 count) + " фаилов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
+                            show_keybord(message)
+                            isGone = False
+                        pass
+                except:
+                        print("\n" + url)
+                        print("\n" + vkResponse)
             except:
-                print("\n" + url)
-                print("\n" + vkResponse)
-        except:
-            bot.send_message(message.from_user.id, "Что-то сломалось,скоро починю.")
+                    bot.send_message(message.from_user.id, "Что-то сломалось,скоро починю.")
+                    pass
             pass
+        pass
     pass
 
 
