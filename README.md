@@ -9,4 +9,4 @@ $ pip install transliterate
 ```
 
 
-![simple reuest](https://raw.github.com/ddci/vkfilebot/blob/master/img/overview.jpg)
+![simple reuqest](https://github.com/ddci/vkfilebot/blob/master/img/overview.jpg?raw=true)
