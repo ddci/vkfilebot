@@ -358,7 +358,7 @@ def msg_step_two(message):
                              emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
                              emoji.emojiCodeDict[":no_entry_sign:"])
             bot.send_message(cid,
-                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок." + emoji.emojiCodeDict[
+                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок  Link или As File" + emoji.emojiCodeDict[
                                  ":no_entry_sign:"])
     except:
         bot.send_message(cid, "Произошла ошибка,повторите попытку позже.", parse_mode="HTML", reply_markup=hideBoard)
@@ -391,7 +391,7 @@ def pages(c):
                     message_id=c.message.message_id,
                     text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
                     parse_mode='HTML',
-                    reply_markup=pages_keyboard(int(c.data[3:]), cid))
+                    reply_markup=pages_keyboard(int(c.daSta[3:]), cid))
                 usersLastCData[cid] = int(c.data[3:])
                 usersLastKeyboard[cid] = pages_keyboard(int(c.data[3:]), cid)
             except:
@@ -405,7 +405,8 @@ def pages(c):
                     reply_markup=usersLastKeyboard[cid])
         pass
     except:
-        time.sleep(259)
+        print("Error in inline method outside")
+        time.sleep(10)
         pass
 
 
@@ -421,138 +422,128 @@ def msg_step_one(message):
     bot.send_message(message.from_user.id, "Надеюсь тут есть,то что тебе нужно.", reply_markup=hideBoard)
     # todo добавить while`ы везде ,чтобы избежать вылета полноценного
     # todo утечка памяти при большом кол-ве пользователей,ибо надо хранить все ссылки на все фаилы
-    tryCounter = 0
-    while tryCounter < 5:
+    if text == "Docs" + emoji.emojiCodeDict[":page_facing_up:"]:
         try:
-            if tryCounter > 0:
-                time.sleep(120)
-            pass
-
-            if text == "Docs" + emoji.emojiCodeDict[":page_facing_up:"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 1
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(1))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                    break
-                except:
-                        print("Error Docs")
-                        userStep[cid] = 0
-                pass
-            elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 2
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(2))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Archives")
-                    userStep[cid] = 0
-                pass
-            elif text == "Gif":
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 3
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(3))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Gif")
-                    userStep[cid] = 0
-                pass
-            elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 4
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(4))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Pics")
-                    userStep[cid] = 0
-                pass
-            elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 5
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(5))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Audio")
-                    userStep[cid] = 0
-                pass
-            elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 6
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(6))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Video")
-                    userStep[cid] = 0
-                pass
-            elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 8
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(8))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Books")
-                    userStep[cid] = 0
-                pass
-            elif text == "Show All":
-                try:
-                    tryCounter = tryCounter + 1
-                    usersChoosedType[cid] = 9
-                    cid = message.chat.id
-                    generated_answer = generateAnswer(message, 1, int(9))
-                    bot.send_chat_action(message.from_user.id, 'typing')
-                    bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
-                                     reply_markup=pages_keyboard(1, cid))
-                    userStep[cid] = 0  # reset the users step back to 0
-                except:
-                    print("Error Show All")
-                    userStep[cid] = 0
-                pass
-            elif text == "pussy":
-                bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
-                userStep[cid] = 1
-            else:
-                bot.send_message(cid,
-                                 emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
-                                 emoji.emojiCodeDict[":no_entry_sign:"])
-                bot.send_message(cid,
-                                 emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок." + emoji.emojiCodeDict[
-                                     ":no_entry_sign:"])
+            usersChoosedType[cid] = 1
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(1))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
         except:
-            print("Whole error")
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
+        try:
+            usersChoosedType[cid] = 2
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(2))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Gif":
+        try:
+            usersChoosedType[cid] = 3
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(3))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
+        try:
+            usersChoosedType[cid] = 4
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(4))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
+        try:
+            usersChoosedType[cid] = 5
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(5))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
+        try:
+            usersChoosedType[cid] = 6
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(6))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
+        try:
+            usersChoosedType[cid] = 8
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(8))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "Show All":
+        try:
+            usersChoosedType[cid] = 9
+            cid = message.chat.id
+            generated_answer = generateAnswer(message, 1, int(9))
+            bot.send_chat_action(message.from_user.id, 'typing')
+            bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
+                             reply_markup=pages_keyboard(1, cid))
+            userStep[cid] = 0  # reset the users step back to 0
+        except:
+            bot.send_message(message.from_user.id,
+                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+            userStep[cid] = 0
+        pass
+    elif text == "pussy":
+        bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
+        userStep[cid] = 1
+    else:
+        bot.send_message(cid,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
+                         emoji.emojiCodeDict[":no_entry_sign:"])
+        bot.send_message(cid,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок." + emoji.emojiCodeDict[
+                             ":no_entry_sign:"])
 
 
 @bot.message_handler(content_types=['text'])
