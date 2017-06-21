@@ -3,7 +3,7 @@
     File name: main.py
     Author: Daniil Nikulin
     Date created: 10.05.2017
-    Date last modified: 18.06.2017
+    Date last modified: 21.06.2017
     Python Version: 3.6.1
 """
 import http.client
@@ -16,13 +16,14 @@ import urllib
 import datetime
 import urllib.request
 import re
-
+from flask import Flask, request
 import telebot
 from telebot import types
 from transliterate import slugify
-
 import constants
 import emoji
+
+server = Flask(__name__)
 
 knownUsers = []  # todo: save these in a file,
 userStep = {}  # so they won't reset every time the bot restarts
@@ -41,6 +42,10 @@ usersInlineKeyboardIsPressed = {}
 usersLastCData = {}
 usersLastKeyboard = {}
 
+bot = telebot.TeleBot(constants.token)
+
+
+
 
 # Read forbidden words from file
 def read_words(words_file):
@@ -50,7 +55,7 @@ def read_words(words_file):
 forbiddenWords = read_words("swearWords.txt")
 forbiddenWordsFull = read_words("fullSwearWords.txt")
 
-bot = telebot.TeleBot(constants.token)
+
 commands = {  # command description used in the "help" command
     'start': 'Начало работы со мной',
     'help': 'Вся необходимая информация'
@@ -263,6 +268,7 @@ bot.set_update_listener(listener)  # register listener
 @bot.message_handler(commands=['start'])
 def command_start(m):
     cid = m.chat.id
+    userStep[cid] = 0
     if cid not in knownUsers:  # if user hasn't used the "/start" command yet:
         knownUsers.append(cid)  # save user id, so you could brodcast messages to all users of this bot later
         userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
@@ -323,7 +329,7 @@ def msg_step_two(message):
             text += "Имя фаила: " + "<b>" + usersDownTitle[usersLastChoosedFile[cid]] + "</b>" + "\n"
             text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
             bot.send_message(cid, text, parse_mode="HTML", reply_markup=hideBoard)
-            bot.send_chat_action(cid, 'upload_document')
+            bot.send_chat_action(cid, 'typing')
             ####SENDING FILE####
             title = str(usersDownTitle[usersLastChoosedFile[cid]])
             line = title.split('.')
@@ -404,7 +410,8 @@ def pages(c):
                     parse_mode='HTML',
                     reply_markup=usersLastKeyboard[cid])
         pass
-    except:
+    except Exception as e:
+        print(e)
         print("Error in inline method outside")
         time.sleep(10)
         pass
@@ -605,4 +612,16 @@ def handle_text(message):
     pass
 
 
-bot.polling(none_stop=True, interval=0)
+@server.route('/' + constants.token, methods=['POST'])
+def get_message():
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "POST", 200
+
+
+@server.route("/")
+def web_hook():
+    bot.remove_webhook()
+    bot.set_webhook(url='https://vkfilebot.herokuapp.com/' + constants.token)
+    return "CONNECTED", 200
+
+server.run(host="0.0.0.0", port=os.environ.get('PORT', 5000))

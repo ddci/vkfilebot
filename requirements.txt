@@ -1,3 +1,6 @@
 pyTelegrambotAPI
 requests
 transliterate
+Flask
+virtualenv
+MarkupSafe==0.23
