@@ -4,3 +4,6 @@ transliterate
 Flask
 virtualenv
 MarkupSafe==0.23
+psycopg2
+SQLAlchemy
+Flask-SQLAlchemy

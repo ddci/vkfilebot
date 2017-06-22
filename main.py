@@ -9,6 +9,9 @@
 import http.client
 import json
 import os
+import psycopg2
+from flask.ext.sqlalchemy import SQLAlchemy
+from urllib.parse import urlparse
 import random
 import string
 import time
@@ -44,8 +47,30 @@ usersLastKeyboard = {}
 
 bot = telebot.TeleBot(constants.token)
 
+# DATABASE FOR COUNTING USERS
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+db = SQLAlchemy(app)
 
 
+class Data(db.Model):
+    __tablename__ = "data"
+    id = db.Column(db.Integer, primary_key=True)
+    firstName = db.Column(db.String(120))
+    lastName = db.Column(db.String(120))
+    cid = db.Column(db.BigInteger, unique=True)
+
+    def __init__(self, first_name, last_name, cid):
+        self.firstName = first_name
+        self.lastName = last_name
+        self.cid = cid
+
+#Define Keyboard
+typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
+typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
+typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
+typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
+typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
 
 # Read forbidden words from file
 def read_words(words_file):
@@ -54,7 +79,6 @@ def read_words(words_file):
 
 forbiddenWords = read_words("swearWords.txt")
 forbiddenWordsFull = read_words("fullSwearWords.txt")
-
 
 commands = {  # command description used in the "help" command
     'start': 'Начало работы со мной',
@@ -199,9 +223,9 @@ def get_user_step(uid):
     if uid in userStep:
         return userStep[uid]
     else:
-        knownUsers.append(uid)
+        #knownUsers.append(uid)
         userStep[uid] = 0
-        print("New user detected, who hasn't used \"/start\" yet")
+        # print("New user detected, who hasn't used \"/start\" yet")
         return 0
 
 
@@ -210,11 +234,6 @@ pass
 
 def show_keybord(message):
     cid = message.chat.id
-    typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-    typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
-    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
-    typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
-    typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
     bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)  # show the keyboard
     userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
     usersMessageSearchRequest[cid] = message.text
@@ -269,13 +288,25 @@ bot.set_update_listener(listener)  # register listener
 def command_start(m):
     cid = m.chat.id
     userStep[cid] = 0
-    if cid not in knownUsers:  # if user hasn't used the "/start" command yet:
-        knownUsers.append(cid)  # save user id, so you could brodcast messages to all users of this bot later
-        userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
-        # bot.send_message(cid, "Hello, stranger, let me scan you...")
-        # bot.send_message(cid, "Scanning complete, I know you now")
-        command_help(m)  # show the new user the help page
+    if db.session.query(Data).filter(Data.cid == int(cid)).count() == 0:
+        try:
+            print("1")
+            # if user hasn't used the "/start" command yet:
+            data = Data(str(m.chat.first_name), str(m.chat.last_name),int(cid))  # save user id, so you could brodcast messages to all users of this bot later
+            userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
+            # bot.send_message(cid, "Hello, stranger, let me scan you...")
+            # bot.send_message(cid, "Scanning complete, I know you now")
+            db.session.add(data)
+            db.session.commit()
+            count = db.session.query(Data.cid).count()
+            print("Всего пользователей: " + str(count))
+            command_help(m)  # show the new user the help page
+        except Exception as e:
+            print("Error in database start ")
+            print(e)
+            pass
     else:
+        print("2")
         # bot.send_message(cid, "I already know you, no need for me to scan you again!")
         command_help(m)  # show the new user the help page
 
@@ -321,7 +352,8 @@ def msg_step_two(message):
             bot.send_message(cid, usersDownLink[usersLastChoosedFile[cid]], parse_mode="HTML", reply_markup=hideBoard)
             userStep[cid] = 0
         elif text == "As File":
-            text = emoji.emojiCodeDict[":hourglass_flowing_sand:"] + "Фаил загружается и вскоре будет отправлен вам." + "\n"
+            text = emoji.emojiCodeDict[
+                       ":hourglass_flowing_sand:"] + "Фаил загружается и вскоре будет отправлен вам." + "\n"
             size = usersDownSize[usersLastChoosedFile[cid]]
             size = float(size)  # in bytes
             size = size / 1024.0  # in KB (Kilo Bytes)
@@ -361,10 +393,12 @@ def msg_step_two(message):
             pass
         else:
             bot.send_message(cid,
-                             emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
+                             emoji.emojiCodeDict[
+                                 ":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
                              emoji.emojiCodeDict[":no_entry_sign:"])
             bot.send_message(cid,
-                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок  Link или As File" + emoji.emojiCodeDict[
+                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок  Link или As File" +
+                             emoji.emojiCodeDict[
                                  ":no_entry_sign:"])
     except:
         bot.send_message(cid, "Произошла ошибка,повторите попытку позже.", parse_mode="HTML", reply_markup=hideBoard)
@@ -379,7 +413,9 @@ def command_help(m):
         help_text += commands[key] + "\n"
     pass
     help_text = help_text + "\n" + "Для взаимодействия с ботом,просто отправь мне свой поисковый запрос,дальше выбери тип фаила," \
-                                   "и способ загрузки." + "\n" + "Бот позволяет загружать фаилы из Вконтакте объёмом до 50МБ,и получать ссылки на все фаилы вне зависимости от объёма."
+                                   "и способ загрузки." + "\n" + "Бот позволяет загружать фаилы из Вконтакте объёмом до 50МБ" \
+                                                                 ",и получать ссылки на все фаилы вне зависимости от объёма. Ссылки внутри чата " \
+                                                                 "дейстиветельны в течении 30 минут."
     bot.send_message(m.chat.id, help_text)  # send the generated help page
 
 
@@ -544,6 +580,24 @@ def msg_step_one(message):
     elif text == "pussy":
         bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
         userStep[cid] = 1
+
+    elif text == "*********":
+        try:
+            count = db.session.query(Data.cid).count()
+            print("Всего пользователей: " + str(count))
+            allUsers = "List of All Users"+"\n"
+            for data in db.session.query(Data).order_by(Data.cid):
+                allUsers+=str(data.firstName)+" "+data.lastName + "\n "+"Chat ID: " + str(data.cid)+"\n"
+                allUsers+="***********"
+                print(data.firstName, data.lastName, data.cid)
+            pass
+        except Exception as e:
+            print("Error in showusers")
+            print(e)
+        pass
+        userStep[cid] = 1
+        bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)
+
     else:
         bot.send_message(cid,
                          emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
@@ -623,5 +677,6 @@ def web_hook():
     bot.remove_webhook()
     bot.set_webhook(url='https://vkfilebot.herokuapp.com/' + constants.token)
     return "CONNECTED", 200
+
 
 server.run(host="0.0.0.0", port=os.environ.get('PORT', 5000))
