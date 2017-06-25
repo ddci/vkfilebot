@@ -3,12 +3,15 @@
     File name: main.py
     Author: Daniil Nikulin
     Date created: 10.05.2017
-    Date last modified: 18.06.2017
+    Date last modified: 26.06.2017
     Python Version: 3.6.1
 """
 import http.client
 import json
 import os
+import psycopg2
+from flask.ext.sqlalchemy import SQLAlchemy
+from urllib.parse import urlparse
 import random
 import string
 import time
@@ -16,16 +19,17 @@ import urllib
 import datetime
 import urllib.request
 import re
-
+from flask import Flask, request
 import telebot
 from telebot import types
 from transliterate import slugify
-
 import constants
 import emoji
 
-knownUsers = []  # todo: save these in a file,
-userStep = {}  # so they won't reset every time the bot restarts
+server = Flask(__name__)
+
+knownUsers = []
+userStep = {}
 usersMessageSearchRequest = {}
 usersChoosedType = {}
 usersVKResponse = {}
@@ -40,6 +44,46 @@ usersDownLink = {}
 usersInlineKeyboardIsPressed = {}
 usersLastCData = {}
 usersLastKeyboard = {}
+usersLastMessageTextSlider = {}
+# Requests frequency limits VK
+# Please define limitation here
+requestLimitVK = 3  # not in use
+currentRequestsVK = 0  # not in use
+# Telegram Requests limitation
+requestLimitTlgrmChat = {}  # Save time of bots last send messages !!!!very important for inline buttons!!
+doNotResponseTlgrm = {}
+currentRequestsTlgrm = 0
+
+bot = telebot.TeleBot(constants.token)
+
+# DATABASE FOR COUNTING USERS
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+db = SQLAlchemy(app)
+
+# Generate Secret Key fro access to users list
+showUsersSecretKey = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(20))
+bot.send_message(YOUR CHAT ID, "Get your secret key" + emoji.emojiCodeDict[":key:"] + "\n")
+bot.send_message(YOUR CHAT ID, showUsersSecretKey + "\n")
+
+
+# Limitation tof Telegram API test
+def checkIfLimit(cid):
+    try:
+        print(int(round(time.time() * 1000)))
+        print(requestLimitTlgrmChat[cid])
+        if (int(round(time.time() * 1000)) - requestLimitTlgrmChat[cid]) > 1300:
+            return False
+        else:
+            return True
+        pass
+    except Exception as exep:
+        print(exep)
+        print("Error in checkIfLimit(cid):")
+        pass
+
+
+pass
 
 
 # Read forbidden words from file
@@ -50,13 +94,88 @@ def read_words(words_file):
 forbiddenWords = read_words("swearWords.txt")
 forbiddenWordsFull = read_words("fullSwearWords.txt")
 
-bot = telebot.TeleBot(constants.token)
 commands = {  # command description used in the "help" command
     'start': 'Начало работы со мной',
     'help': 'Вся необходимая информация'
 }
 
+tips = {  # tips description used in the "tips" command
+    'Совет №1': "Если ищешь книгу " + emoji.emojiCodeDict[
+        ":blue_book:"] + ", то часто легче найти в pdf или djvu с помощью "
+                         "кнопки" + "<b>" + "[ Текст(pdf,doc) ]" + "</b>",
+
+    'Совет №2': "Если ты из Украины " + emoji.emojiCodeDict[":U:"] + emoji.emojiCodeDict[":A:"] +
+                " выбирай способ загрузки " + "<b>" + "Фаил" + "</b>" \
+                + " и тебе не понадобится скачивать по ссылке на VK (заблокрованый ресурс).",
+
+    'Совет №3': "Музыку трудно найти тут, все борятся с пиратством. Скорее всего ты найдешь "
+                "рингтон по своему запросу. Но любимая песня на звонке, разве не подарок? " + emoji.emojiCodeDict[
+                    ":grinning:"],
+
+    'Совет №4': "Гифки ищются легко и непринужденно (особенно на русском), но всё же в Телеграме лучшие гифки тут " + "@gif. "
+}
+
+typesText = {  # types description used in the "types" command
+    "Все": "Все фаилы найденные по запросу",
+    emoji.emojiCodeDict[
+        ":page_facing_up:"] + "Текст(pdf,doc)": "Текстовые документы форматов:" + "\n" + 'dpf, doc, docx, txt, odt...',
+
+    emoji.emojiCodeDict[":open_book:"] + "Книги": 'Книжные форматы:' + "\n" + "epub, fb2...",
+    emoji.emojiCodeDict[":compression :"] + "Архивы": 'Все архивные форматы: ' + "\n" + 'zip, rar, 7z...',
+    "Gif": 'Анимации: gif',
+    emoji.emojiCodeDict[":frame_photo"] + "Изображения": "Графические форматы: " + "\n" + 'jpg, jpeg, bmp, png, m3d ,tif...',
+    emoji.emojiCodeDict[":musical_note:"] + "Аудио": "Форматы аудио: " + 'flac, mp3, m4r, mp2, wav',
+    emoji.emojiCodeDict[":video_camera:"] + "Видео": "Форматы видео: " + 'mp4, webm, mkv, 3gp',
+}
+
+# Define Keyboard
+typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+typeSelect.row("Все", "Текст(pdf,doc)" + emoji.emojiCodeDict[":page_facing_up:"])
+typeSelect.row("Книги" + emoji.emojiCodeDict[":open_book:"], "Архивы" + emoji.emojiCodeDict[":compression :"])
+typeSelect.row("Gif", "Изображения" + emoji.emojiCodeDict[":frame_photo"])
+typeSelect.row("Аудио" + emoji.emojiCodeDict[":musical_note:"], "Видео" + emoji.emojiCodeDict[":video_camera:"])
 hideBoard = types.ReplyKeyboardRemove()  # if sent as reply_markup, will hide the keyboard
+
+
+class Data(db.Model):
+    __tablename__ = "data"
+    id = db.Column(db.Integer, primary_key=True)
+    firstName = db.Column(db.String(120))
+    lastName = db.Column(db.String(120))
+    cid = db.Column(db.BigInteger, unique=True)
+    lastq = db.Column(db.String(200))
+    userstep = db.Column(db.Integer)
+
+    def __init__(self, first_name, last_name, cid, lastq, userstep):
+        self.firstName = first_name
+        self.lastName = last_name
+        self.cid = cid
+        self.lastq = lastq
+        self.userstep = userstep
+
+
+def setdbUserStep(cid, step):
+    try:
+        data = db.session.query(Data).filter(Data.cid == int(cid)).first()
+        data.userstep = step
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        pass
+
+
+def getdbUserStep(cid):
+    datDB = db.session.query(Data).filter(Data.cid == int(cid)).first()
+    return int(datDB.userstep)
+
+
+try:
+    for data in db.session.query(Data).order_by(Data.cid):
+        userStep[data.cid] = data.userstep
+except Exception as e:
+    print(e)
+    print("Error in read users steps")
+    pass
 
 with open("log.txt", "a") as myfile:
     myfile.write(str(datetime.datetime.now()) + ": " + "New session" + "\n")
@@ -70,25 +189,40 @@ def getApiConnection():
 # noinspection PyTypeChecker
 def generateAnswer(message, offset, file_category):
     cid = message.chat.id
-    # if offset > 1:
-    #     usersInlineKeyboardIsPressed[cid] = True
-    # if offset == 10:
-    #     usersIsAlreadySearched[cid] = False
     try:
-        if not usersIsAlreadySearched[cid]:
-            apiConnection = getApiConnection()
-            cid = message.chat.id
-            searchText = urllib.parse.quote(usersMessageSearchRequest[cid])
-            url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
-                  + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+        if usersIsAlreadySearched[cid] is None:
+            usersIsAlreadySearched[cid] = False
+    except:
+        usersIsAlreadySearched[cid] = False
         pass
+    try:
         try:
-            if usersIsAlreadySearched[cid]:
-                vkResponse = usersVKResponse[cid]
+            if not usersIsAlreadySearched[cid]:
+                apiConnection = getApiConnection()
+                cid = message.chat.id
+                data = db.session.query(Data).filter(Data.cid == int(cid)).first()
+                print(data.lastq)
+                usersMessageSearchRequest[cid] = data.lastq
+                searchText = urllib.parse.quote(str(data.lastq))
+                print(searchText)
+                url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
+                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
             else:
+                searchText = urllib.parse.quote(usersMessageSearchRequest[cid])
+                url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
+                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+        except:
+            print("Exeption in #212")
+            pass
+        try:
+            if not usersIsAlreadySearched[cid]:
+                print("Response to VK from step 2")
                 usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
                 usersIsAlreadySearched[cid] = True
+            elif usersIsAlreadySearched:
+                vkResponse = usersVKResponse[cid]
         except (ConnectionError, http.client.BadStatusLine):
+            print("(ConnectionError, http.client.BadStatusLine):apiConnection.close()")
             apiConnection.close()
         try:
             items = vkResponse.get("items")
@@ -122,33 +256,34 @@ def generateAnswer(message, offset, file_category):
                     usersCountFiles[cid] = int(data.get("count"))
                 for iterPosition in range(0, int(data.get("count"))):
                     if (offset * 5) - 5 <= iterPosition < offset * 5:
+                        randomDowStr = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(2))
                         genereted_answer += "<b>" + str(data.get(iterPosition).get("title", 0) + "\n") + "</b>"
 
-                        usersDownloadCommand["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = "dw_" + str(
-                            cid) + str(data.get(iterPosition).get("id", 0))
-                        usersDownTitle["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = data.get(
+                        usersDownloadCommand["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = \
+                            "d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr
+                        usersDownTitle["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = data.get(
                             iterPosition).get(
                             "title", 0)
 
                         genereted_answer += "Расширение фаила: " + "<i>" + data.get(iterPosition).get("ext",
                                                                                                       0) + "</i>" + "\n"
-                        usersDownExt["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = data.get(
+                        usersDownExt["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = data.get(
                             iterPosition).get(
                             "ext", 0)
                         unRedirectUrl = data.get(iterPosition).get("url", 0)
                         size = data.get(iterPosition).get("size", 0)
 
-                        usersDownSize["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = size
+                        usersDownSize["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = size
 
                         size = float(size)  # in bytes
                         size = size / 1024.0  # in KB (Kilo Bytes)
                         size = size / 1024.0  # size in MB (Mega Bytes)
                         genereted_answer += "Размер фаила:" + "<i>" + " " "%.3f" % size + " MB" + "</i>" + "\n"
 
-                        usersDownLink["dw_" + str(cid) + str(data.get(iterPosition).get("id", 0))] = unRedirectUrl
+                        usersDownLink["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = unRedirectUrl
 
-                        genereted_answer += "<i>" + "Download: " + "</i>" + "/dw_" + str(cid) + str(
-                            data.get(iterPosition).get("id", 0)) + "\n"
+                        genereted_answer += "<i>" + "Download: " + "</i>" + "/d_" + str(
+                            data.get(iterPosition).get("id", 0)) + randomDowStr + "\n"
 
                         if iterPosition - ((offset * 5) - 1):
                             genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
@@ -164,15 +299,26 @@ def generateAnswer(message, offset, file_category):
                 pass
                 return genereted_answer
             pass
-
-        except:
-            print("\n" + url)
-            print("\n" + vkResponse)
-
-    except:
+        except Exception as e:
+            print("Error in generate answer")
+            print(e)
+            print(url)
+            userStep[cid] = 0
+            setdbUserStep(cid, 0)
+    except Exception as e:
         print("Error in generate answer")
         bot.send_message(message.from_user.id,
                          "Что-то сломалось,скоро починю." + emoji.emojiCodeDict[":pensive:"] + "\n")
+        userStep[cid] = 0
+        try:
+            setdbUserStep(cid, 0)
+        except:
+            print("Error in generate answer DB")
+            pass
+    pass
+
+
+pass
 
 
 # Запрос к API VK.
@@ -194,9 +340,9 @@ def get_user_step(uid):
     if uid in userStep:
         return userStep[uid]
     else:
-        knownUsers.append(uid)
+        # knownUsers.append(uid)
         userStep[uid] = 0
-        print("New user detected, who hasn't used \"/start\" yet")
+        # print("New user detected, who hasn't used \"/start\" yet")
         return 0
 
 
@@ -205,37 +351,46 @@ pass
 
 def show_keybord(message):
     cid = message.chat.id
-    typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-    typeSelect.row("Show All", "Docs" + emoji.emojiCodeDict[":page_facing_up:"])
-    typeSelect.row("Books" + emoji.emojiCodeDict[":open_book:"], "Archives" + emoji.emojiCodeDict[":compression :"])
-    typeSelect.row("Gif", "Pics" + emoji.emojiCodeDict[":frame_photo"])
-    typeSelect.row("Audio" + emoji.emojiCodeDict[":musical_note:"], "Video" + emoji.emojiCodeDict[":video_camera:"])
     bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)  # show the keyboard
     userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
+    try:
+        setdbUserStep(cid, 1)
+    except Exception as e:
+        print(e)
+        pass
     usersMessageSearchRequest[cid] = message.text
 
 
 pass
 
 
+# Show < 2 > directions buttons Also I use random string to avoid showing that button hasn't been updated on Android
+# (I don't know why, but if callback data has been not updated you will have update animated circle on your button
+# for 20 sec)
 def pages_keyboard(offset, cid):
     try:
-        time.sleep(0.2)
         keyboard = types.InlineKeyboardMarkup()
         btns = []
         if usersCountFiles[cid] == 0:
             return hideBoard
         if offset > 1:
             btns.append(types.InlineKeyboardButton(
-                text=emoji.emojiCodeDict[":arrow_left:"], callback_data='to_{}'.format(offset - 1)))
+                text=emoji.emojiCodeDict[":arrow_left:"],
+                callback_data=''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(2)) +
+                              '_{}'.format(offset - 1)))
         if offset < (usersCountFiles[cid] / 5):
             btns.append(types.InlineKeyboardButton(
-                text=str(offset), callback_data='to_{}'.format(offset)))
+                text=str(offset),
+                callback_data=''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(2)) +
+                              '_{}'.format(999)))
             btns.append(types.InlineKeyboardButton(
-                text=emoji.emojiCodeDict[":arrow_right:"], callback_data='to_{}'.format(offset + 1)))
+                text=emoji.emojiCodeDict[":arrow_right:"],
+                callback_data=''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(2)) +
+                              '_{}'.format(offset + 1)))
         keyboard.add(*btns)
         return keyboard  # возвращаем объект клавиатуры
-    except:
+    except Exception as e:
+        print(e)
         print("Error in pages_keyboard")
 
 
@@ -244,9 +399,6 @@ pass
 
 # only used for console output now
 def listener(messages):
-    """
-    When new messages arrive TeleBot will call this function.
-    """
     for m in messages:
         if m.content_type == 'text':
             parsedText = urllib.parse.quote(m.text)
@@ -263,13 +415,25 @@ bot.set_update_listener(listener)  # register listener
 @bot.message_handler(commands=['start'])
 def command_start(m):
     cid = m.chat.id
-    if cid not in knownUsers:  # if user hasn't used the "/start" command yet:
-        knownUsers.append(cid)  # save user id, so you could brodcast messages to all users of this bot later
-        userStep[cid] = 0  # save user id and his current "command level", so he can use the "/getImage" command
-        # bot.send_message(cid, "Hello, stranger, let me scan you...")
-        # bot.send_message(cid, "Scanning complete, I know you now")
-        command_help(m)  # show the new user the help page
+    userStep[cid] = 0
+    if db.session.query(Data).filter(Data.cid == int(cid)).count() == 0:
+        try:
+            print("1")
+            # if user hasn't used the "/start" command yet:
+            data = Data(str(m.chat.first_name), str(m.chat.last_name), int(cid), None,
+                        0)  # save user id, so you could brodcast messages to all users of this bot later
+            userStep[cid] = 0  # save user id and his current "command level"
+            db.session.add(data)
+            db.session.commit()
+            count = db.session.query(Data.cid).count()
+            print("Всего пользователей: " + str(count))
+            command_help(m)  # show the new user the help page
+        except Exception as e:
+            print("Error in database start ")
+            print(e)
+            pass
     else:
+        print("2")
         # bot.send_message(cid, "I already know you, no need for me to scan you again!")
         command_help(m)  # show the new user the help page
 
@@ -279,6 +443,7 @@ def command_download(m):
     cid = m.chat.id
     line = re.sub('[/]', '', m.text)
     userStep[cid] = 2
+    setdbUserStep(cid, 2)
     size = usersDownSize[line]
     if size is None:
         size = 0
@@ -286,16 +451,20 @@ def command_download(m):
     size = size / 1024.0  # in KB (Kilo Bytes)
     size = size / 1024.0  # size in MB (Mega Bytes)
 
-    dwTypeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
-    if size < 50:
-        dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"], "As File")
-    else:
-        dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"])
+    dwTypeSelect = downloadKeyboard(size)
     usersLastChoosedFile[cid] = line
     bot.send_message(cid,
                      "Выбери способ загрузки. " + '\n' + "Учти,если ВК заблокирован,то скачать по ссылке будет "
                                                          "невозможно.", parse_mode="HTML",
                      reply_markup=dwTypeSelect)
+
+
+def downloadKeyboard(size):
+    dwTypeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)  # create the image selection keyboard
+    if size < 50:
+        return dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"], "As File")
+    else:
+        return dwTypeSelect.row("Direct Link via VK" + emoji.emojiCodeDict[":link:"])
 
 
 @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 2)
@@ -314,16 +483,18 @@ def msg_step_two(message):
             text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
             bot.send_message(cid, usersDownLink[usersLastChoosedFile[cid]], parse_mode="HTML", reply_markup=hideBoard)
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         elif text == "As File":
-            text = emoji.emojiCodeDict[":hourglass_flowing_sand:"] + "Фаил загружается и вскоре будет отправлен вам." + "\n"
+            text = emoji.emojiCodeDict[
+                       ":hourglass_flowing_sand:"] + "Фаил загружается и вскоре будет отправлен вам." + "\n"
             size = usersDownSize[usersLastChoosedFile[cid]]
             size = float(size)  # in bytes
             size = size / 1024.0  # in KB (Kilo Bytes)
             size = size / 1024.0  # size in MB (Mega Bytes)
             text += "Имя фаила: " + "<b>" + usersDownTitle[usersLastChoosedFile[cid]] + "</b>" + "\n"
-            text += "Размер фаила:" + "<b>" + " " "%.3f" % size + "MB" + "</b>" + "\n"
+            text += "Размер фаила:" + "<b>" + " " "%.3f" % size + " MB" + "</b>" + "\n"
             bot.send_message(cid, text, parse_mode="HTML", reply_markup=hideBoard)
-            bot.send_chat_action(cid, 'upload_document')
+            bot.send_chat_action(cid, 'typing')
             ####SENDING FILE####
             title = str(usersDownTitle[usersLastChoosedFile[cid]])
             line = title.split('.')
@@ -339,74 +510,190 @@ def msg_step_two(message):
                 file_name = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(10))
                 urllib.request.urlretrieve(usersDownLink[usersLastChoosedFile[cid]], file_name + "." + ext)
                 doc = open(file_name + "." + ext, 'rb')
+                if 16000 >= os.path.getsize(file_name + "." + ext) >= 15000:
+                    bot.send_message(message.from_user.id, "Скорее всего этот документ не откроется, "
+                                                           "так как был удалён по просьбе правообладателей.",
+                                     parse_mode='HTML')
                 bot.send_chat_action(cid, 'upload_document')
                 bot.send_document(message.from_user.id, doc, reply_markup=hideBoard)
                 doc.close()
                 os.remove(file_name + "." + ext)
                 userStep[cid] = 0
+                setdbUserStep(cid, 0)
                 pass
             if not isExeptionoccured:
                 doc = open(file_name + "." + ext, 'rb')
+                if 16000 >= os.path.getsize(file_name + "." + ext) >= 15000:
+                    bot.send_message(message.from_user.id, "Скорее всего этот документ не откроется, "
+                                                           "так как был удалён по просьбе правообладателей.",
+                                     parse_mode='HTML')
                 bot.send_chat_action(cid, 'upload_document')
                 bot.send_document(message.from_user.id, doc, reply_markup=hideBoard)
                 doc.close()
                 os.remove(file_name + "." + ext)
                 userStep[cid] = 0
+                setdbUserStep(cid, 0)
             pass
         else:
+            size = usersDownSize[usersLastChoosedFile[cid]]
+            if size is None:
+                size = 0
+            size = float(size)  # in bytes
+            size = size / 1024.0  # in KB (Kilo Bytes)
+            size = size / 1024.0  # size in MB (Mega Bytes)
             bot.send_message(cid,
-                             emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
+                             emoji.emojiCodeDict[
+                                 ":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
                              emoji.emojiCodeDict[":no_entry_sign:"])
             bot.send_message(cid,
-                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок  Link или As File" + emoji.emojiCodeDict[
-                                 ":no_entry_sign:"])
+                             emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок.",
+                             reply_markup=downloadKeyboard(size))
     except:
-        bot.send_message(cid, "Произошла ошибка,повторите попытку позже.", parse_mode="HTML", reply_markup=hideBoard)
+        bot.send_message(cid, "Произошла ошибка,повторите попытку позже. Скорее всего я презагрузился,просто повтори "
+                              "свой поисковый запрос.", parse_mode="HTML", reply_markup=hideBoard)
+        userStep[cid] = 0  # reset the users step back to 0
+        setdbUserStep(cid, 0)
+
         pass
 
 
 @bot.message_handler(commands=['help'])
 def command_help(m):
-    help_text = "Доступные следующие команды: \n"
-    for key in commands:  # generate help text out of the commands dictionary defined at the top
-        help_text += "/" + key + ": "
-        help_text += commands[key] + "\n"
-    pass
-    help_text = help_text + "\n" + "Для взаимодействия с ботом,просто отправь мне свой поисковый запрос,дальше выбери тип фаила," \
-                                   "и способ загрузки." + "\n" + "Бот позволяет загружать фаилы из Вконтакте объёмом до 50МБ,и получать ссылки на все фаилы вне зависимости от объёма."
-    bot.send_message(m.chat.id, help_text)  # send the generated help page
+    try:
+        # help_text = "Доступные следующие команды: \n"
+        # for key in commands:  # generate help text out of the commands dictionary defined at the top
+        #     help_text += "/" + key + ": "
+        #     help_text += commands[key] + "\n"
+        # pass
+        help_text = emoji.emojiCodeDict[
+                        ":mag:"] + " Для взаимодействия с ботом,просто отправь мне свой поисковый запрос." \
+                                   "Потом выбери тип фаила и способ загрузки." + "\n" + "\n" + \
+                    emoji.emojiCodeDict[":arrow_down:"] + " Бот позволяет загружать фаилы из Вконтакте до " \
+                    + "<b>" + "50 МБ " + "</b>" + "(" + "бот отправит фаил в чат" + ")" + ", и получать ссылки на все фаилы вне зависимости от размера." + "\n" + \
+                    "Ссылки внутри чата " \
+                    "действительны в течении " + "<b>" + "30" + "</b>" + " минут." + emoji.emojiCodeDict[
+                        ":clock1130:"] + "\n" + "\n"
+        tipNumber, tipText = random.choice(list(tips.items()))
+        help_text += emoji.emojiCodeDict[":bulb:"] + tipNumber + "\n" + "\n"
+        help_text += tipText
+        help_text += "\n" + "\n" + "Все советы: /tips"
+        help_text += "\n" + "Описание типов: /types"
+        bot.send_message(m.chat.id, help_text, parse_mode='HTML')  # send the generated help page
+    except Exception as e:
+        print(e)
+        pass
+
+
+@bot.message_handler(commands=['tips'])
+def command_tips(m):
+    cid = m.chat.id
+    try:
+        tips_text = ""
+        for key in tips:  # generate help text out of the commands dictionary defined at the top
+            tips_text += emoji.emojiCodeDict[":bulb:"] + "<b>" + key + "</b>" + "\n"
+            tips_text += tips[key] + "\n" + "\n"
+        pass
+        bot.send_message(m.chat.id, tips_text, parse_mode='HTML')  # send the generated help page
+        userStep[cid] = 0
+        setdbUserStep(cid, 0)
+    except Exception as e:
+        print("Exception in /tips ")
+        print(e)
+        pass
+
+
+@bot.message_handler(commands=['exit'])
+def command_exit(m):
+    cid = m.chat.id
+    try:
+        bot.send_message(m.chat.id, emoji.emojiCodeDict[":mag:"] + "Введите свой поисковый запрос.",
+                         parse_mode='HTML')  # send the generated help page
+        userStep[cid] = 0
+        setdbUserStep(cid, 0)
+    except Exception as e:
+        print(e)
+        pass
+
+
+@bot.message_handler(commands=['types'])
+def command_types(m):
+    cid = m.chat.id
+    try:
+        types_text = ""
+        for key in typesText:  # generate help text out of the commands dictionary defined at the top
+            types_text += "<b>" + key + "</b>" + "\n"
+            types_text += typesText[key] + "\n" + "\n"
+        pass
+        bot.send_message(m.chat.id, types_text, parse_mode='HTML')  # send the generated help page
+        userStep[cid] = 0
+        setdbUserStep(cid, 0)
+    except Exception as e:
+        print(e)
+        pass
 
 
 @bot.callback_query_handler(func=lambda c: c.data)
 def pages(c):
-    # time.sleep(0.5)
-    try:
-        cid = c.message.chat.id
-        if usersLastCData[cid] == int(c.data[3:]):
+    # Format strings contain “replacement fields” surrounded by curly braces {}. Anything that is not contained in
+    # braces is considered literal text, which is copied unchanged to the output. If you need to include a brace
+    # character in the literal text, it can be escaped by doubling: {{ and }}. time.sleep(0.5) callback_data='to_{
+    # }'.format(offset - 1)
+    # Predefined function
+    def changeAnswMessage():
+        if usersLastCData[cid] == int(c.data[3:]):  # delete
+            bot.answer_callback_query(callback_query_id=c.id)
+            return
+        if int(c.data[3:]) == 999:
+            bot.answer_callback_query(callback_query_id=c.id)
             return
         else:
             try:
+                usersLastMessageTextSlider[cid] = generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid])
                 bot.edit_message_text(
                     chat_id=c.message.chat.id,
                     message_id=c.message.message_id,
-                    text=generateAnswer(c.message, int(c.data[3:]), usersChoosedType[cid]),
+                    text=usersLastMessageTextSlider[cid],  ####Careful
                     parse_mode='HTML',
                     reply_markup=pages_keyboard(int(c.data[3:]), cid))
+                requestLimitTlgrmChat[cid] = int(round(time.time() * 1000))
                 usersLastCData[cid] = int(c.data[3:])
-                usersLastKeyboard[cid] = pages_keyboard(int(c.data[3:]), cid)
-            except:
-                time.sleep(2)
+            except Exception as exception:
+                print(exception)
                 print("Error in inline method inside")
-                bot.edit_message_text(
-                    chat_id=c.message.chat.id,
-                    message_id=c.message.message_id,
-                    text=c.message.text,
-                    parse_mode='HTML',
-                    reply_markup=usersLastKeyboard[cid])
+                # bot.answer_callback_query(callback_query_id=c.id)
+                requestLimitTlgrmChat[cid] = int(round(time.time() * 1000))
+                raise
+
+    # Begin here
+    try:
+        cid = c.message.chat.id
+        if not checkIfLimit(cid):
+            requestLimitTlgrmChat[cid] = int(round(time.time() * 1000))
+            changeAnswMessage()
+            pass
+        else:
+            if not doNotResponseTlgrm[cid]:
+                doNotResponseTlgrm[cid] = True
+                time.sleep(1)
+                bot.answer_callback_query(callback_query_id=c.id, text="Не нажимай так быстро.")
+                while checkIfLimit(cid):
+                    time.sleep(random.uniform(1.2, 2.1))
+                pass
+                doNotResponseTlgrm[cid] = False
+                bot.answer_callback_query(callback_query_id=c.id)
+            else:
+                return
         pass
-    except:
+    except Exception as ee:
         print("Error in inline method outside")
-        time.sleep(10)
+        print(ee)
+        requestLimitTlgrmChat[cid] = int(round(time.time() * 1000))
+        bot.edit_message_text(
+            chat_id=c.message.chat.id,
+            message_id=c.message.message_id,
+            text="Пожалуйста повтори свой запрос,я не храню даннные так долго." + emoji.emojiCodeDict[":sweat_smile:"],
+            parse_mode='HTML')
+        time.sleep(1)
         pass
 
 
@@ -416,13 +703,18 @@ pass
 @bot.message_handler(func=lambda message: get_user_step(message.chat.id) == 1)
 def msg_step_one(message):
     cid = message.chat.id
-    usersLastCData[cid] = int(1)
     text = message.text
+
+    # PreInitialization
+    usersLastCData[cid] = int(1)
+    doNotResponseTlgrm[cid] = False
+
     bot.send_chat_action(cid, 'typing')
     bot.send_message(message.from_user.id, "Надеюсь тут есть,то что тебе нужно.", reply_markup=hideBoard)
-    # todo добавить while`ы везде ,чтобы избежать вылета полноценного
+    # initialize first time
+    requestLimitTlgrmChat[cid] = int(round(time.time() * 1000))
     # todo утечка памяти при большом кол-ве пользователей,ибо надо хранить все ссылки на все фаилы
-    if text == "Docs" + emoji.emojiCodeDict[":page_facing_up:"]:
+    if text == "Текст(pdf,doc)" + emoji.emojiCodeDict[":page_facing_up:"]:
         try:
             usersChoosedType[cid] = 1
             cid = message.chat.id
@@ -430,13 +722,16 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
-            userStep[cid] = 0  # reset the users step back to 0
+            userStep[cid] = 0
+            setdbUserStep(cid, 0)  # reset the users step back to 0
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Archives" + emoji.emojiCodeDict[":compression :"]:
+    elif text == "Архивы" + emoji.emojiCodeDict[":compression :"]:
         try:
             usersChoosedType[cid] = 2
             cid = message.chat.id
@@ -445,10 +740,13 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
     elif text == "Gif":
         try:
@@ -459,12 +757,15 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Pics" + emoji.emojiCodeDict[":frame_photo"]:
+    elif text == "Изображения" + emoji.emojiCodeDict[":frame_photo"]:
         try:
             usersChoosedType[cid] = 4
             cid = message.chat.id
@@ -473,12 +774,15 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Audio" + emoji.emojiCodeDict[":musical_note:"]:
+    elif text == "Аудио" + emoji.emojiCodeDict[":musical_note:"]:
         try:
             usersChoosedType[cid] = 5
             cid = message.chat.id
@@ -487,12 +791,15 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Video" + emoji.emojiCodeDict[":video_camera:"]:
+    elif text == "Видео" + emoji.emojiCodeDict[":video_camera:"]:
         try:
             usersChoosedType[cid] = 6
             cid = message.chat.id
@@ -501,12 +808,15 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Books" + emoji.emojiCodeDict[":open_book:"]:
+    elif text == "Книги" + emoji.emojiCodeDict[":open_book:"]:
         try:
             usersChoosedType[cid] = 8
             cid = message.chat.id
@@ -515,12 +825,15 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
-    elif text == "Show All":
+    elif text == "Все":
         try:
             usersChoosedType[cid] = 9
             cid = message.chat.id
@@ -529,21 +842,56 @@ def msg_step_one(message):
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
             userStep[cid] = 0  # reset the users step back to 0
+            setdbUserStep(cid, 0)
         except:
             bot.send_message(message.from_user.id,
-                             "Сильно много запросов,подожди." + emoji.emojiCodeDict[":pensive:"] + "\n")
+                             "Сильно много запросов,подожди 1-2 минуты и повтори попытку." + emoji.emojiCodeDict[
+                                 ":pensive:"] + "\n")
             userStep[cid] = 0
+            setdbUserStep(cid, 0)
         pass
     elif text == "pussy":
         bot.send_photo(message.from_user.id, open('kitten.jpg', 'rb'), reply_markup=hideBoard)
         userStep[cid] = 1
+        setdbUserStep(cid, 1)
+
+    elif text == showUsersSecretKey:
+        try:
+            count = db.session.query(Data.cid).count()
+            print("Всего пользователей: " + str(count))
+            allUsers = "List of All Users" + "\n" + "Всего пользователей: " + str(count) + "\n"
+            for data in db.session.query(Data).order_by(Data.cid):
+                allUsers += str(data.firstName) + " " + data.lastName + "\n" + "Chat ID: " + str(data.cid) + "\n"
+                allUsers += "***********" + "\n"
+                print(data.firstName, data.lastName, data.cid)
+            pass
+            bot.send_message(cid, allUsers, reply_markup=hideBoard)
+            userStep[cid] = 0
+            setdbUserStep(cid, 0)
+            return
+        except Exception as e:
+            print("Error in showusers")
+            print(e)
+
+        pass
+        userStep[cid] = 1
+        setdbUserStep(cid, 1)
+        try:
+            bot.send_message(cid, allUsers, reply_markup=typeSelect)
+            bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)
+        except:
+            userStep[cid] = 1
+            setdbUserStep(cid, 1)
+            bot.send_message(cid, "Выбери тип фаила:", reply_markup=typeSelect)
+            pass
+
     else:
         bot.send_message(cid,
                          emoji.emojiCodeDict[":no_entry_sign:"] + "Не вводи всякую глупость,если я даю тебе кнопки!" +
                          emoji.emojiCodeDict[":no_entry_sign:"])
         bot.send_message(cid,
                          emoji.emojiCodeDict[":no_entry_sign:"] + "Нажмите на одну из кнопок." + emoji.emojiCodeDict[
-                             ":no_entry_sign:"])
+                             ":no_entry_sign:"], reply_markup=typeSelect)
 
 
 @bot.message_handler(content_types=['text'])
@@ -559,15 +907,37 @@ def handle_text(message):
             text2 = str(fullBadWord.lower()).encode("utf-8")
             if text2 == text:
                 bot.send_message(message.from_user.id,
-                                 emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут2" +
+                                 emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут." +
                                  emoji.emojiCodeDict[":no_entry_sign:"])
                 return
             pass
         pass
+        try:
+            try:
+                data = db.session.query(Data).filter(Data.cid == int(cid)).first()
+                if data is None:
+                    raise TypeError(data)
+            except Exception as e:
+                print("An old user who hasn't been added to DB")
+                data = Data(str(message.chat.first_name), str(message.chat.last_name), int(cid), None,
+                            0)
+                db.session.add(data)
+                db.session.commit()
+                pass
+            data = db.session.query(Data).filter(Data.cid == int(cid)).first()
+            data.lastq = message.text
+            db.session.commit()
+        except Exception as e:
+            print("Error in lastq add")
+            print(e)
+            pass
+        retry = 0
         isGone = True
-        usersInlineKeyboardIsPressed[cid] = False
         while isGone:
             try:
+                retry += 1
+                if retry > 10:
+                    isGone = False
                 bot.send_chat_action(message.from_user.id, 'typing')
                 cid = message.chat.id
                 apiConnection = getApiConnection()
@@ -577,6 +947,7 @@ def handle_text(message):
                 try:
                     usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
                     usersIsAlreadySearched[cid] = True
+                    print("Got valid response from VK")
                 except (ConnectionError, http.client.BadStatusLine) as e:
                     apiConnection.close()
                 try:
@@ -597,12 +968,27 @@ def handle_text(message):
                 except:
                     print("\n" + url)
                     print("\n" + vkResponse)
+                    time.sleep(2)
             except:
-                bot.send_message(message.from_user.id, "Что-то сломалось,скоро починю.!!!")
+                print("Request to VK Nr. 1")
+                time.sleep(random.randint(1, 3))
                 pass
             pass
         pass
     pass
 
 
-bot.polling(none_stop=True, interval=0)
+@server.route('/' + constants.token, methods=['POST'])
+def get_message():
+    bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+    return "POST", 200
+
+
+@server.route("/")
+def web_hook():
+    bot.remove_webhook()
+    bot.set_webhook(url='https://vkfilebot.herokuapp.com/' + constants.token)
+    return "CONNECTED" + "\n Contact " + "<a href=" + "https://t.me/daniel_nikulin" + ">" + "Daniel" + "<a>", 200
+
+
+server.run(host="0.0.0.0", port=os.environ.get('PORT', 5000))
