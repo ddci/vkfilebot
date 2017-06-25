@@ -670,6 +670,8 @@ emojiCodeDict = {
     ":city_sunrise:": u"\U0001f307",
     ":dango:": u"\U0001f361",
     ":thumbsdown:": u"\U0001f44e",
+    ":U:": u"\U0001f1fa",
+    ":A:": u"\U0001f1e6",
     ":u6307:": u"\U0001f22f",
     ":curry:": u"\U0001f35b",
     ":cherries:": u"\U0001f352",
