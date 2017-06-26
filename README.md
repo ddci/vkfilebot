@@ -10,7 +10,7 @@ You do not need to interact with VK servers, and if VK is banned in your country
 ## Requirements
 Installation using pip (a Python package manager): <br>
 
-`` `Bash
+```Bash
 $ Pip install pyTelegramBotAPI
 $ Pip install requests
 $ Pip install transliterate
@@ -19,14 +19,11 @@ $ Pip install MarkupSafe
 $ Pip install transliterate
 $ Pip install SQLAlchemy
 $ Pip install Flask-SQLAlchemy
-`` `
+```
 ## Runtime
-```Python-3.6.1````
+```Python-3.6.1```
 
 ## Overview
-
--bot has moderations system: just add word you want to ban to swerWords.txt (block all words with this substring in a mesasge) and fullSwearWords.txt <br>
--connected DB to store user's steps and chat ids
-
-
-! [Simple reuqest] (https://github.com/ddci/vkfilebot/blob/master/img/overview.jpg?raw=true)
+![alt text](https://raw.githubusercontent.com/ddci/vkfilebot/master/img/overview.jpg "Preview")
+bot has moderations system: just add word you want to ban to swerWords.txt (block all words with this substring in a mesasge) and fullSwearWords.txt <br>
+connected DB to store user's steps and chat ids <br>
