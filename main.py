@@ -3,28 +3,30 @@
     File name: main.py
     Author: Daniil Nikulin
     Date created: 10.05.2017
-    Date last modified: 27.06.2017
+    Date last modified: 05.07.2017
     Python Version: 3.6.1
 """
+import datetime
 import http.client
-import json
 import os
-import psycopg2
-from flask.ext.sqlalchemy import SQLAlchemy
-from urllib.parse import urlparse
 import random
+import re
 import string
 import time
 import urllib
-import datetime
 import urllib.request
-import re
-from flask import Flask, request
+from urllib.parse import urlparse
+
 import telebot
+from flask import Flask, request
+from flask.ext.sqlalchemy import SQLAlchemy
+from sqlalchemy import ForeignKey, DateTime
 from telebot import types
 from transliterate import slugify
+
 import constants
 import emoji
+import vk
 
 server = Flask(__name__)
 
@@ -54,12 +56,44 @@ requestLimitTlgrmChat = {}  # Save time of bots last send messages !!!!very impo
 doNotResponseTlgrm = {}
 currentRequestsTlgrm = 0
 
-bot = telebot.TeleBot(constants.token)
+bot = telebot.TeleBot(constants.TOKEN_TELEGRAM)
 
 # DATABASE FOR COUNTING USERS
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 db = SQLAlchemy(app)
+
+commands = {  # command description used in the "help" command
+    'start': 'Начало работы со мной',
+    'help': 'Вся необходимая информация'
+}
+tips = {  # tips description used in the "tips" command
+    'Совет №1': "Если ищешь книгу " + emoji.emojiCodeDict[
+        ":blue_book:"] + ", то часто легче найти в pdf или djvu с помощью "
+                         "кнопки" + "<b>" + "\n" + "[ Текст(pdf,doc) ]" + "</b>",
+
+    'Совет №2': "Если ты из Украины " + emoji.emojiCodeDict[":U:"] + emoji.emojiCodeDict[":A:"] +
+                " выбирай способ загрузки " + "<b>" + "Файл" + "</b>" \
+                + " и тебе не понадобится скачивать по ссылке на VK (заблокрованый ресурс).",
+
+    'Совет №3': "Музыку трудно найти тут, все борятся с пиратством. Скорее всего ты найдешь "
+                "рингтон по своему запросу. Но любимая песня на звонке, разве не подарок? " + emoji.emojiCodeDict[
+                    ":grinning:"],
+
+    'Совет №4': "Гифки ищются легко и непринужденно (особенно на русском), но всё же в Телеграме лучшие гифки тут " + "@gif. "
+}
+typesText = {  # types description used in the "types" command
+    "Все": "Все файлы найденные по запросу",
+    emoji.emojiCodeDict[
+        ":page_facing_up:"] + "Текст(pdf,doc)": 'dpf, doc, docx, txt, odt...',
+
+    emoji.emojiCodeDict[":open_book:"] + "Книги": "epub, fb2...",
+    emoji.emojiCodeDict[":compression :"] + "Архивы": 'zip, rar, 7z...',
+    "Gif": 'Анимации: gif',
+    emoji.emojiCodeDict[":frame_photo"] + "Изображения": 'jpg, jpeg, bmp, png, m3d ,tif...',
+    emoji.emojiCodeDict[":musical_note:"] + "Аудио": 'flac, mp3, m4r, mp2, wav',
+    emoji.emojiCodeDict[":video_camera:"] + "Видео": 'mp4, webm, mkv, 3gp',
+}
 
 
 # Limitation tof Telegram API test
@@ -67,7 +101,7 @@ def checkIfLimit(cid):
     try:
         print(int(round(time.time() * 1000)))
         print(requestLimitTlgrmChat[cid])
-        if (int(round(time.time() * 1000)) - requestLimitTlgrmChat[cid]) > 1300:
+        if (int(round(time.time() * 1000)) - requestLimitTlgrmChat[cid]) > 1500:
             return False
         else:
             return True
@@ -89,40 +123,6 @@ def read_words(words_file):
 forbiddenWords = read_words("swearWords.txt")
 forbiddenWordsFull = read_words("fullSwearWords.txt")
 
-commands = {  # command description used in the "help" command
-    'start': 'Начало работы со мной',
-    'help': 'Вся необходимая информация'
-}
-
-tips = {  # tips description used in the "tips" command
-    'Совет №1': "Если ищешь книгу " + emoji.emojiCodeDict[
-        ":blue_book:"] + ", то часто легче найти в pdf или djvu с помощью "
-                         "кнопки" + "<b>" + "\n" + "[ Текст(pdf,doc) ]" + "</b>",
-
-    'Совет №2': "Если ты из Украины " + emoji.emojiCodeDict[":U:"] + emoji.emojiCodeDict[":A:"] +
-                " выбирай способ загрузки " + "<b>" + "Файл" + "</b>" \
-                + " и тебе не понадобится скачивать по ссылке на VK (заблокрованый ресурс).",
-
-    'Совет №3': "Музыку трудно найти тут, все борятся с пиратством. Скорее всего ты найдешь "
-                "рингтон по своему запросу. Но любимая песня на звонке, разве не подарок? " + emoji.emojiCodeDict[
-                    ":grinning:"],
-
-    'Совет №4': "Гифки ищются легко и непринужденно (особенно на русском), но всё же в Телеграме лучшие гифки тут " + "@gif. "
-}
-
-typesText = {  # types description used in the "types" command
-    "Все": "Все файлы найденные по запросу",
-    emoji.emojiCodeDict[
-        ":page_facing_up:"] + "Текст(pdf,doc)": 'dpf, doc, docx, txt, odt...',
-
-    emoji.emojiCodeDict[":open_book:"] + "Книги": "epub, fb2...",
-    emoji.emojiCodeDict[":compression :"] + "Архивы": 'zip, rar, 7z...',
-    "Gif": 'Анимации: gif',
-    emoji.emojiCodeDict[":frame_photo"] + "Изображения": 'jpg, jpeg, bmp, png, m3d ,tif...',
-    emoji.emojiCodeDict[":musical_note:"] + "Аудио": 'flac, mp3, m4r, mp2, wav',
-    emoji.emojiCodeDict[":video_camera:"] + "Видео": 'mp4, webm, mkv, 3gp',
-}
-
 # Define Keyboard
 typeSelect = types.ReplyKeyboardMarkup(one_time_keyboard=True)
 typeSelect.row("Все", "Текст(pdf,doc)" + emoji.emojiCodeDict[":page_facing_up:"])
@@ -132,7 +132,7 @@ typeSelect.row("Аудио" + emoji.emojiCodeDict[":musical_note:"], "Видео
 hideBoard = types.ReplyKeyboardRemove()  # if sent as reply_markup, will hide the keyboard
 
 
-class Data(db.Model):
+class Users(db.Model):
     __tablename__ = "data"
     id = db.Column(db.Integer, primary_key=True)
     firstName = db.Column(db.String(120))
@@ -149,16 +149,43 @@ class Data(db.Model):
         self.userstep = userstep
 
 
+class Requests(db.Model):
+    __tablename__ = "requests"
+    id = db.Column(db.Integer, primary_key=True)
+    cid = db.Column(db.BigInteger, ForeignKey('data.cid'), nullable=False)
+    searchReq = db.Column(db.String(200))
+    fileType = db.Column(db.Integer)
+    datetime = db.Column(db.DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    def __init__(self, cid, search_req, file_type):
+        self.cid = cid
+        self.searchReq = search_req
+        self.fileType = file_type
+
+
 # Generate Secret Key fro access to users list
 showUsersSecretKey = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(20))
-countUsr = db.session.query(Data.cid).count()
-bot.send_message(YOUR CHAT ID, emoji.emojiCodeDict[":computer:"] + "The user started the interaction" + "\n" +
+countUsr = db.session.query(Users.cid).count()
+bot.send_message(constants.MY_CID, emoji.emojiCodeDict[":computer:"] + "The user started the interaction" + "\n" +
                  "Current users in DB: " + str(countUsr) + "\n")
+
+
+def addRequestToDB(cid, req, file_type):
+    try:
+        dataDB = Requests(int(cid), str(req), int(file_type))
+        db.session.add(dataDB)
+        db.session.commit()
+    except Exception as exception:
+        print("Error in addRequestToDB")
+        print(exception)
+
+
+pass
 
 
 def setdbUserStep(cid, step):
     try:
-        dataDB = db.session.query(Data).filter(Data.cid == int(cid)).first()
+        dataDB = db.session.query(Users).filter(Users.cid == int(cid)).first()
         dataDB.userstep = step
         db.session.commit()
     except Exception as exception:
@@ -167,12 +194,12 @@ def setdbUserStep(cid, step):
 
 
 def getdbUserStep(cid):
-    datDB = db.session.query(Data).filter(Data.cid == int(cid)).first()
+    datDB = db.session.query(Users).filter(Users.cid == int(cid)).first()
     return int(datDB.userstep)
 
 
 try:
-    for data in db.session.query(Data).order_by(Data.cid):
+    for data in db.session.query(Users).order_by(Users.cid):
         userStep[data.cid] = data.userstep
 except Exception as e:
     print(e)
@@ -181,11 +208,6 @@ except Exception as e:
 
 with open("log.txt", "a") as myfile:
     myfile.write(str(datetime.datetime.now()) + ": " + "New session" + "\n")
-
-
-# Открытие соединения с VK.
-def getApiConnection():
-    return http.client.HTTPSConnection("api.vk.com")
 
 
 # noinspection PyTypeChecker
@@ -200,26 +222,26 @@ def generateAnswer(message, offset, file_category):
     try:
         try:
             if not usersIsAlreadySearched[cid]:
-                apiConnection = getApiConnection()
+                apiConnection = vk.getApiConnection()
                 cid = message.chat.id
-                data = db.session.query(Data).filter(Data.cid == int(cid)).first()
+                data = db.session.query(Users).filter(Users.cid == int(cid)).first()
                 print(data.lastq)
                 usersMessageSearchRequest[cid] = data.lastq
                 searchText = urllib.parse.quote(str(data.lastq))
                 print(searchText)
                 url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
-                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+                      + '&offset=' + '1' + '&access_token=' + constants.TOKEN_VK + '&v=5.64'
             else:
                 searchText = urllib.parse.quote(usersMessageSearchRequest[cid])
                 url = '/method/docs.search?q=' + searchText + '&count=' + '500' \
-                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+                      + '&offset=' + '1' + '&access_token=' + constants.TOKEN_VK + '&v=5.64'
         except:
-            print("Exeption in #212")
+            print("Exception in #212")
             pass
         try:
             if not usersIsAlreadySearched[cid]:
                 print("Response to VK from step 2")
-                usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
+                usersVKResponse[cid] = vkResponse = vk.vkRequest(apiConnection, url).get("response", 0)
                 usersIsAlreadySearched[cid] = True
             elif usersIsAlreadySearched:
                 vkResponse = usersVKResponse[cid]
@@ -232,8 +254,8 @@ def generateAnswer(message, offset, file_category):
             if count == 0:
                 bot.send_message(message.chat.id, "Прости,но я ничего не нашёл")
             else:
-                genereted_answer = emoji.emojiCodeDict[":white_check_mark:"] + "Найденные файлы по запросу: " + "\n" + \
-                                   "'" + "<b>" + str(usersMessageSearchRequest[cid]) + "</b>" + "'" + "\n" + "\n"
+                generatedAnswer = emoji.emojiCodeDict[":white_check_mark:"] + "Найденные файлы по запросу: " + "\n" + \
+                                  "'" + "<b>" + str(usersMessageSearchRequest[cid]) + "</b>" + "'" + "\n" + "\n"
                 data = {'count': 0}
                 if 1 <= file_category <= 8:
                     for item in items:
@@ -251,15 +273,31 @@ def generateAnswer(message, offset, file_category):
                         data[data.get('count')] = item_new
                         data['count'] = data.get('count') + 1
                     pass
+                pass
+                amountLinkFiles = 0
+                for iterPosition in range(0, int(data.get("count"))):
+                    if str(data.get(iterPosition).get("ext", 0)) == "url":
+                        amountLinkFiles += 1
+                pass
+                if amountLinkFiles == int(data.get("count")):
+                    bot.send_message(cid,
+                                     emoji.emojiCodeDict[
+                                         ":warning:"] + "Обратите внимание на то, что все файлы в выдаче это ссылки "
+                                                        "на другие ресурсы." + emoji.emojiCodeDict[
+                                         ":warning:"],
+                                     parse_mode="HTML")
+                pass
+                print(amountLinkFiles)
                 if offset == 1:
                     if data.get("count") == 0:
-                        genereted_answer += emoji.emojiCodeDict[":no_entry:"]
-                    genereted_answer += "Файлов соотвутствующих критерию: " + str(data.get("count")) + "\n" + "\n"
+                        generatedAnswer += emoji.emojiCodeDict[":no_entry:"]
+                    generatedAnswer += "Файлов соотвутствующих критерию: " + str(data.get("count")) + "\n" + "\n"
                     usersCountFiles[cid] = int(data.get("count"))
+
                 for iterPosition in range(0, int(data.get("count"))):
                     if (offset * 5) - 5 <= iterPosition < offset * 5:
                         randomDowStr = ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(2))
-                        genereted_answer += "<b>" + str(data.get(iterPosition).get("title", 0) + "\n") + "</b>"
+                        generatedAnswer += "<b>" + str(data.get(iterPosition).get("title", 0) + "\n") + "</b>"
 
                         usersDownloadCommand["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = \
                             "d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr
@@ -267,11 +305,13 @@ def generateAnswer(message, offset, file_category):
                             iterPosition).get(
                             "title", 0)
 
-                        genereted_answer += "Расширение файла: " + "<i>" + data.get(iterPosition).get("ext",
-                                                                                                      0) + "</i>" + "\n"
+                        generatedAnswer += "Расширение файла: " + "<i>" + data.get(iterPosition).get("ext",
+                                                                                                     0) + "</i>"
                         usersDownExt["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = data.get(
                             iterPosition).get(
                             "ext", 0)
+                        if data.get(iterPosition).get("ext", 0) == "url":
+                            generatedAnswer += emoji.emojiCodeDict[":link:"]
                         unRedirectUrl = data.get(iterPosition).get("url", 0)
                         size = data.get(iterPosition).get("size", 0)
 
@@ -280,26 +320,26 @@ def generateAnswer(message, offset, file_category):
                         size = float(size)  # in bytes
                         size = size / 1024.0  # in KB (Kilo Bytes)
                         size = size / 1024.0  # size in MB (Mega Bytes)
-                        genereted_answer += "Размер файла:" + "<i>" + " " "%.3f" % size + " MB" + "</i>" + "\n"
+                        generatedAnswer += "\n" + "Размер файла:" + "<i>" + " " "%.3f" % size + " MB" + "</i>" + "\n"
 
                         usersDownLink["d_" + str(data.get(iterPosition).get("id", 0)) + randomDowStr] = unRedirectUrl
 
-                        genereted_answer += "<i>" + "Download: " + "</i>" + "/d_" + str(
+                        generatedAnswer += "<i>" + "Download: " + "</i>" + "/d_" + str(
                             data.get(iterPosition).get("id", 0)) + randomDowStr + "\n"
 
                         if iterPosition - ((offset * 5) - 1):
-                            genereted_answer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_blue_diamond:"] + \
-                                                emoji.emojiCodeDict[":small_red_triangle_down:"] + "\n" + "\n"
+                            generatedAnswer += emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_blue_diamond:"] + \
+                                               emoji.emojiCodeDict[":small_red_triangle_down:"] + "\n" + "\n"
                         pass
                 pass
-                return genereted_answer
+                return generatedAnswer
             pass
         except Exception as e:
             print("Error in generate answer")
@@ -323,21 +363,6 @@ def generateAnswer(message, offset, file_category):
 pass
 
 
-# Запрос к API VK.
-def vkRequest(api_connection, url):
-    api_connection.request('GET', url)
-    vkResponse = api_connection.getresponse().read()
-    vkJson = json.loads(vkResponse.decode("utf-8"))
-
-    # Обработка Too many requests per second.
-    if vkJson.get("response", 0) == 0:
-        if vkJson.get("error", 0).get("error_code", 0) == 6:
-            time.sleep(0.35)
-            return vkRequest(api_connection, url)
-
-    return vkJson
-
-
 def get_user_step(uid):
     if uid in userStep:
         return userStep[uid]
@@ -351,14 +376,14 @@ def get_user_step(uid):
 pass
 
 
-def show_keybord(message):
+def show_keyboard(message):
     cid = message.chat.id
     bot.send_message(cid, "Выбери тип файла:", reply_markup=typeSelect)  # show the keyboard
     userStep[cid] = 1  # set the user to the next step (expecting a reply in the listener now)
     try:
         setdbUserStep(cid, 1)
-    except Exception as e:
-        print(e)
+    except Exception as ex:
+        print(ex)
         pass
     usersMessageSearchRequest[cid] = message.text
 
@@ -418,24 +443,24 @@ bot.set_update_listener(listener)  # register listener
 def command_start(m):
     cid = m.chat.id
     userStep[cid] = 0
-    if db.session.query(Data).filter(Data.cid == int(cid)).count() == 0:
+    if db.session.query(Users).filter(Users.cid == int(cid)).count() == 0:
         try:
-            print("1")
+            print("New user pressed start")
             # if user hasn't used the "/start" command yet:
-            data = Data(str(m.chat.first_name), str(m.chat.last_name), int(cid), None,
-                        0)  # save user id, so you could brodcast messages to all users of this bot later
+            dataDB = Users(str(m.chat.first_name), str(m.chat.last_name), int(cid), None,
+                           0)  # save user id, so you could brodcast messages to all users of this bot later
             userStep[cid] = 0  # save user id and his current "command level"
-            db.session.add(data)
+            db.session.add(dataDB)
             db.session.commit()
-            count = db.session.query(Data.cid).count()
+            count = db.session.query(Users.cid).count()
             print("Всего пользователей: " + str(count))
             command_help(m)  # show the new user the help page
-        except Exception as e:
+        except Exception as ex:
             print("Error in database start ")
-            print(e)
+            print(ex)
             pass
     else:
-        print("2")
+        print("Old user pressed start")
         # bot.send_message(cid, "I already know you, no need for me to scan you again!")
         command_help(m)  # show the new user the help page
 
@@ -597,13 +622,13 @@ def command_tips(m):
         bot.send_message(m.chat.id, tips_text, parse_mode='HTML')  # send the generated help page
         userStep[cid] = 0
         setdbUserStep(cid, 0)
-    except Exception as e:
+    except Exception as ex:
         print("Exception in /tips ")
-        print(e)
+        print(ex)
         pass
 
 
-@bot.message_handler(commands=['exit'])
+@bot.message_handler(commands=['exit']) 
 def command_exit(m):
     cid = m.chat.id
     try:
@@ -640,9 +665,19 @@ pass
 def command_types(m):
     cid = m.chat.id
     try:
-        if cid == YOUR CHAT ID:
-            bot.send_message(YOUR CHAT ID, "Get your secret key" + emoji.emojiCodeDict[":key:"] + "\n")
-            bot.send_message(YOUR CHAT ID, showUsersSecretKey + "\n")
+        if cid == constants.MY_CID:
+            try:
+                count = db.session.query(Users.cid).count()
+                print("Всего пользователей: " + str(count))
+                allUsers = "Всего пользователей: " + str(count) + "\n"
+                bot.send_message(cid, allUsers, reply_markup=hideBoard)
+                userStep[cid] = 0
+                setdbUserStep(cid, 0)
+                return
+            except Exception as e:
+                print("Error in show users")
+                print(e)
+            pass
             userStep[cid] = 0
             setdbUserStep(cid, 0)
         else:
@@ -730,7 +765,7 @@ pass
 def msg_step_one(message):
     cid = message.chat.id
     text = message.text
-
+    searchText = usersMessageSearchRequest[cid]
     # PreInitialization
     usersLastCData[cid] = int(1)
     doNotResponseTlgrm[cid] = False
@@ -748,6 +783,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=1)
             userStep[cid] = 0
             setdbUserStep(cid, 0)  # reset the users step back to 0
         except:
@@ -765,6 +801,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=2)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -782,6 +819,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=3)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -799,6 +837,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=4)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -816,6 +855,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=5)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -833,6 +873,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=6)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -850,6 +891,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=8)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except:
@@ -867,6 +909,7 @@ def msg_step_one(message):
             bot.send_chat_action(message.from_user.id, 'typing')
             bot.send_message(message.from_user.id, generated_answer, parse_mode='HTML',
                              reply_markup=pages_keyboard(1, cid))
+            addRequestToDB(cid, searchText, file_type=9)
             userStep[cid] = 0  # reset the users step back to 0
             setdbUserStep(cid, 0)
         except Exception as ee:
@@ -892,26 +935,20 @@ def msg_step_one(message):
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     cid = message.chat.id
-    if message.text == showUsersSecretKey:
-        try:
-            count = db.session.query(Data.cid).count()
-            print("Всего пользователей: " + str(count))
-            allUsers = "List of All Users" + "\n" + "Всего пользователей: " + str(count) + "\n"
-            for dataDB in db.session.query(Data).order_by(Data.cid):
-                allUsers += str(dataDB.firstName) + " " + dataDB.lastName + "\n" + "Chat ID: " + str(dataDB.cid) + "\n"
-                allUsers += "***********" + "\n"
-                print(dataDB.firstName, dataDB.lastName, dataDB.cid)
-            pass
-            bot.send_message(cid, allUsers, reply_markup=hideBoard)
-            userStep[cid] = 0
-            setdbUserStep(cid, 0)
-            return
-        except Exception as e:
-            print("Error in showusers")
-            print(e)
+    if len(str(message.text)) >= 60:
+        bot.send_message(message.from_user.id,
+                         emoji.emojiCodeDict[":no_entry_sign:"] + "Очень длинный поисковый запрос" +
+                         emoji.emojiCodeDict[":no_entry_sign:"])
+        print("Search request is too long")
+        return
+    try:
+        print(str(datetime.datetime.now()) + ": " + "Search request " + "from " + "[" + str(cid) + "] " + str(
+            message.chat.first_name) + " " + str(
+            message.chat.last_name) + " searches: " + str(message.text))
+    except Exception as ee:
+        print(ee)
         pass
-
-    elif any(word in message.text.lower() for word in forbiddenWords):
+    if any(word in message.text.lower() for word in forbiddenWords):
         bot.send_message(message.from_user.id,
                          emoji.emojiCodeDict[":no_entry_sign:"] + "Ой,не стоит искать всякую гадость тут." +
                          emoji.emojiCodeDict[":no_entry_sign:"])
@@ -928,17 +965,17 @@ def handle_text(message):
         pass
         try:
             try:
-                dataDB = db.session.query(Data).filter(Data.cid == int(cid)).first()
+                dataDB = db.session.query(Users).filter(Users.cid == int(cid)).first()
                 if dataDB is None:
                     raise TypeError(dataDB)
             except Exception as e:
                 print("An old user who hasn't been added to DB")
-                dataDB = Data(str(message.chat.first_name), str(message.chat.last_name), int(cid), None,
-                              0)
+                dataDB = Users(str(message.chat.first_name), str(message.chat.last_name), int(cid), None,
+                               0)
                 db.session.add(dataDB)
                 db.session.commit()
                 pass
-            dataDB = db.session.query(Data).filter(Data.cid == int(cid)).first()
+            dataDB = db.session.query(Users).filter(Users.cid == int(cid)).first()
             dataDB.lastq = message.text
             db.session.commit()
         except Exception as e:
@@ -954,12 +991,12 @@ def handle_text(message):
                     isGone = False
                 bot.send_chat_action(message.from_user.id, 'typing')
                 cid = message.chat.id
-                apiConnection = getApiConnection()
+                apiConnection = vk.getApiConnection()
                 searchText = urllib.parse.quote(message.text)
                 url = '/method/docs.search?q=' + searchText + '&count=' + '1000' \
-                      + '&offset=' + '1' + '&access_token=' + constants.tokenVK + '&v=5.64'
+                      + '&offset=' + '1' + '&access_token=' + constants.TOKEN_VK + '&v=5.64'
                 try:
-                    usersVKResponse[cid] = vkResponse = vkRequest(apiConnection, url).get("response", 0)
+                    usersVKResponse[cid] = vkResponse = vk.vkRequest(apiConnection, url).get("response", 0)
                     usersIsAlreadySearched[cid] = True
                     print("Got valid response from VK")
                 except (ConnectionError, http.client.BadStatusLine) as e:
@@ -976,7 +1013,7 @@ def handle_text(message):
                         bot.send_message(message.from_user.id,
                                          "Я нашёл " + str(
                                              count) + " файлов. " + "Доступны первые 1000 результатов." + "\n" + "Ну что,давай отсортируем их?")
-                        show_keybord(message)
+                        show_keyboard(message)
                         isGone = False
                     pass
                 except:
@@ -992,7 +1029,7 @@ def handle_text(message):
     pass
 
 
-@server.route('/' + constants.token, methods=['POST'])
+@server.route('/' + constants.TOKEN_TELEGRAM, methods=['POST'])
 def get_message():
     bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
     return "POST", 200
@@ -1001,7 +1038,7 @@ def get_message():
 @server.route("/")
 def web_hook():
     bot.remove_webhook()
-    bot.set_webhook(url='https://vkfilebot.herokuapp.com/' + constants.token)
+    bot.set_webhook(url='https://vkfilebot.herokuapp.com/' + constants.TOKEN_TELEGRAM)
     return "CONNECTED" + "\n Contact " + "<a href=" + "https://t.me/daniel_nikulin" + ">" + "Daniel" + "<a>", 200
 
 
