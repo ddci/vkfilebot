@@ -1,0 +1,5 @@
+*.pyc 
+
+config/__pycache__/
+moderation/__pycache__/
+umptn(expmpl).py
